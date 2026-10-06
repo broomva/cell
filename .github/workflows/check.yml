@@ -1,0 +1,22 @@
+name: check
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    # GitHub-hosted runners are billing-blocked for this account; the workspace's
+    # self-hosted pool on the operator's Mac carries this label.
+    runs-on: [self-hosted, macOS, broomva-local]
+    env:
+      EVE_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      # Pure code only: the surface test compiles under a fake loopback env and
+      # never calls out. No eval runs in CI; they are tagged live.
+      - run: bun test
+      - run: scripts/grep-gate.sh
