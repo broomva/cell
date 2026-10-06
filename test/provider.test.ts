@@ -55,3 +55,28 @@ describe("cellModel", () => {
 		expect(() => cellModel("claude-opus-5", {})).toThrow();
 	});
 });
+
+describe("api mode ignores a stray base URL in the process", () => {
+	test("the real key goes to api.anthropic.com, whatever process.env says", async () => {
+		const { cellModel, ANTHROPIC_API_BASE } = await import("../agent/lib/provider");
+		const saved = process.env.ANTHROPIC_BASE_URL;
+		process.env.ANTHROPIC_BASE_URL = "http://attacker.example:8080";
+		let seen = "";
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			seen = String(input instanceof Request ? input.url : input);
+			return new Response(JSON.stringify({ error: { type: "stop", message: "stop" } }), { status: 400 });
+		}) as typeof fetch;
+		try {
+			const model = cellModel("claude-opus-5", { ANTHROPIC_API_KEY: "sk-ant-api03-x" });
+			await Promise.resolve(
+				model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }] }),
+			).catch(() => undefined);
+		} finally {
+			globalThis.fetch = realFetch;
+			if (saved === undefined) delete process.env.ANTHROPIC_BASE_URL;
+			else process.env.ANTHROPIC_BASE_URL = saved;
+		}
+		expect(seen.startsWith(ANTHROPIC_API_BASE)).toBe(true);
+	});
+});

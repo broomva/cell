@@ -62,7 +62,12 @@ const n = run(["node", "--version"]);
 if (n.code !== 0 || !/^v24\./.test(n.out.trim())) fail("node", `eve needs Node 24, found ${n.out.trim() || "none"}`);
 pass("node", n.out.trim());
 
-// 7. D13: how long the grant has, against a one-attempt, ten-minute budget
+// 7. this checkout's git hooks are the repository's
+const hp = run(["git", "-C", resolve(import.meta.dir, ".."), "config", "core.hooksPath"]);
+if (hp.out.trim() !== ".githooks") fail("hooks", `core.hooksPath is "${hp.out.trim()}"; run \`bun run hooks:install\``);
+pass("hooks", "core.hooksPath = .githooks");
+
+// 8. D13: how long the grant has, against a one-attempt, ten-minute budget
 const st = run(["holon", "auth", "status"]);
 const g13 = checkGrant(st.out, { taskTimeout: 600, maxRequeues: 0, maxPause: 0 });
 if (!g13.ok) fail("grant", g13.reason);

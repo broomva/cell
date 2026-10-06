@@ -12,11 +12,12 @@ These are the boundaries the tests and CI enforce. A change that weakens one is 
 | Boundary | Enforced by |
 |---|---|
 | The OAuth grant never enters the eve process; it lives in `holon` and reaches the app only as a per-run loopback key | `agent/lib/provider.ts`, `test/provider.test.ts`, mutants `provider-*` |
-| The sidecar is loopback-only; the provider refuses any other base URL | same |
+| The sidecar is loopback-only; api mode sends the real key only to `api.anthropic.com`, whatever the process environment says | same |
 | The root agent has no shell, file, fetch, search or self-copy tool | `agent/tools/*.ts`, `test/surface.test.ts`, mutants `surface-*` |
-| `ANTHROPIC_*` is read in one file | `scripts/grep-gate.sh` |
+| `ANTHROPIC_*` is read in one file of the app | `scripts/grep-gate.sh` (literal names and computed environment reads) |
 | No holon work starts that could outlive the grant (Claude Code is the only refresher) | `agent/lib/grant.ts`, mutants `grant-*` |
-| No secret is committed | gitleaks in the pre-commit hook and in CI over full history |
+| No secret is committed | gitleaks in the pre-commit hook (refuses the commit if gitleaks is missing) and in CI over the full history |
+| A PR cannot weaken the checks that judge it | `gate-guard`, run from `main`'s copy under `pull_request_target`, reading the PR through the API only |
 
 ## Scope and use
 

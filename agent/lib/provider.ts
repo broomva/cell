@@ -11,6 +11,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 
 export type ProviderMode = { kind: "sidecar"; baseURL: string; apiKey: string } | { kind: "api"; apiKey: string };
 
+export const ANTHROPIC_API_BASE = "https://api.anthropic.com/v1";
+
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 export function resolveMode(env: Record<string, string | undefined>): ProviderMode {
@@ -53,6 +55,8 @@ export function cellModel(modelId: string, env: Record<string, string | undefine
 	const anthropic =
 		mode.kind === "sidecar"
 			? createAnthropic({ baseURL: mode.baseURL, apiKey: mode.apiKey })
-			: createAnthropic({ apiKey: mode.apiKey });
+			: // Explicit: createAnthropic would otherwise read ANTHROPIC_BASE_URL from
+				// process.env, bypassing the env this function validated.
+				createAnthropic({ apiKey: mode.apiKey, baseURL: ANTHROPIC_API_BASE });
 	return anthropic(modelId);
 }

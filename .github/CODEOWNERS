@@ -1,4 +1,5 @@
-# Every path; the gates and the boundaries most of all.
+# Review routing. With one maintainer, code-owner review cannot be required
+# (an author cannot approve their own PR); gate-guard is what holds the gates.
 *                       @broomva
 /.github/               @broomva
 /scripts/lib/           @broomva
