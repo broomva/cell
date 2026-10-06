@@ -32,6 +32,7 @@ const TEST = /(^test\/|\.test\.ts$|\.eval\.ts$)/;
 const TICKET = /(\b[A-Z]{2,}-\d+\b|#\d+\b)/;
 /** This file spells out every pattern it bans. It is exempt from the line rules; the gate guard holds it instead. */
 const SELF = /^scripts\/lib\/slop\.ts$/;
+const LITERAL_ASSERTION = /\bexpect\(\s*(true|false|null|undefined|-?\d+(\.\d+)?|"[^"]*"|'[^']*')\s*\)/;
 
 interface LineRule {
 	id: string;
@@ -48,6 +49,12 @@ export const LINE_RULES: LineRule[] = [
 		// Biome's noSkippedTests covers .skip( and x-prefixed tests; these slip past it.
 		bad: /\.(todo|todoIf|skipIf|if|failing)\b|\.skip\.|\.each\(\s*\[\s*\]/,
 		detail: "a todo, conditional or expected-to-fail test can switch itself off",
+	},
+	{
+		id: "assertion-on-literal",
+		applies: (p) => TEST.test(p),
+		bad: LITERAL_ASSERTION,
+		detail: "an assertion on a literal (expect(true), expect(1)) checks nothing",
 	},
 	{
 		id: "ts-nocheck",
@@ -169,11 +176,44 @@ const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Model-path files: changing one needs live evidence (an eval run) or a stated reason it was not run. */
 export const MODEL_PATH = /^(agent\/|evals\/|package\.json$)/;
 
+/** agent/ files no test can import (eve loads them by slot); the surface test or an eval covers them. */
+const SLOTS = /^agent\/(tools|channels|sandbox|instructions)\/|^agent\/agent\.ts$/;
+
+const ASSERTION = /\bexpect\(|\bt\.(check|require|calledTool|notCalledTool|succeeded|usedNoTools|messageIncludes)\(/;
+
+/** The names a test file imports from a module path (named, renamed, default and namespace imports). */
+export function importedNames(testSource: string, modulePath: string): string[] {
+	const spec = `["'](?:\\.{1,2}/)+${escapeRe(modulePath)}(?:\\.ts)?["']`;
+	const names: string[] = [];
+	for (const m of testSource.matchAll(new RegExp(`import\\s+([^;]*?)\\s+from\\s+${spec}`, "g"))) {
+		const clause = m[1] ?? "";
+		const braces = clause.match(/\{([^}]*)\}/)?.[1] ?? "";
+		for (const part of braces.split(",")) {
+			const name = part
+				.replace(/^\s*type\s+/, "")
+				.split(/\s+as\s+/)
+				.at(-1)
+				?.trim();
+			if (name) names.push(name);
+		}
+		const outside = clause.replace(/\{[^}]*\}/, "").replace(/\*\s+as\s+/, "");
+		for (const name of outside.split(",").map((x) => x.trim())) if (/^[A-Za-z_$][\w$]*$/.test(name)) names.push(name);
+	}
+	for (const m of testSource.matchAll(new RegExp(`\\{([^}]*)\\}\\s*=\\s*await\\s+import\\(\\s*${spec}\\s*\\)`, "g"))) {
+		for (const part of (m[1] ?? "").split(",")) {
+			const name = part.split(":").at(-1)?.trim();
+			if (name) names.push(name);
+		}
+	}
+	return names;
+}
+
 /**
  * Each changed source file under agent/ or scripts/lib/ needs a changed test
- * that imports it and adds an assertion. agent/ files no test imports (tool
- * slots, agent.ts, channels) need the surface test or an eval to change
- * instead. A test that merely mentions the module's name does not count.
+ * that imports it and adds an assertion using something it imported from it.
+ * agent/ slot files no test can import need an added assertion in the surface
+ * test or an eval instead. A name mention, an unrelated assertion in a test
+ * that happens to import the module, or an assertion on a literal does not count.
  */
 export function untestedChangeFindings(
 	changes: FileChange[],
@@ -182,24 +222,29 @@ export function untestedChangeFindings(
 ): Finding[] {
 	const live = changes.filter((c) => c.status !== "D");
 	const tests = live.filter((c) => TEST.test(c.path));
-	const asserts = (path: string) =>
-		added.some(
-			(l) => l.path === path && /\bexpect\(|\bt\.(check|require|called|succeeded|usedNoTools|notCalled)/.test(l.text),
-		);
+	const assertions = (path: string) =>
+		added.filter((l) => l.path === path && ASSERTION.test(l.text) && !LITERAL_ASSERTION.test(l.text));
 	const out: Finding[] = [];
 	for (const c of live) {
 		if (!/^(agent\/|scripts\/lib\/)/.test(c.path) || !TS.test(c.path) || TEST.test(c.path)) continue;
 		const modulePath = c.path.replace(TS, "");
-		const imports = new RegExp(`["'](?:\\.{1,2}/)+${escapeRe(modulePath)}(?:\\.ts)?["']`);
-		const covered = tests.some((t) => imports.test(readFile(t.path)) && asserts(t.path));
-		const surface =
-			/^agent\//.test(c.path) &&
-			tests.some((t) => (t.path === "test/surface.test.ts" || /^evals\//.test(t.path)) && asserts(t.path));
-		if (!covered && !surface) {
+		const covered = tests.some((t) => {
+			const names = importedNames(readFile(t.path), modulePath);
+			return (
+				names.length > 0 &&
+				assertions(t.path).some((l) => names.some((n) => new RegExp(`\\b${escapeRe(n)}\\b`).test(l.text)))
+			);
+		});
+		const slot =
+			SLOTS.test(c.path) &&
+			tests.some(
+				(t) => (t.path === "test/surface.test.ts" || /^evals\//.test(t.path)) && assertions(t.path).length > 0,
+			);
+		if (!covered && !slot) {
 			out.push({
 				rule: "source-without-test",
 				where: c.path,
-				detail: `no changed test imports ${modulePath} and adds an assertion`,
+				detail: `no changed test imports ${modulePath} and adds an assertion that uses it`,
 			});
 		}
 	}
@@ -242,7 +287,7 @@ export function prBodyFindings(body: string, needs: EvidenceNeeds): Finding[] {
 		const declined = /^Live eval not run: \S+(\s+\S+){4,}/m.test(section);
 		if (!ran && !declined) {
 			out.push({
-				rule: "pr-live-evidence",
+				rule: "pr-live-status",
 				where: "PR body",
 				detail:
 					"the model path changed: quote `bun run eval`'s `Results: N passed (N total)`, or `Live eval not run: <reason>`",

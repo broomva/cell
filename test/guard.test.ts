@@ -22,6 +22,8 @@ describe("guard: gate files", () => {
 			"scripts/gate-guard.ts",
 			"scripts/lib/agent-gate.ts",
 			"scripts/agent-pretool-gate.ts",
+			"scripts/ruleset-check.ts",
+			"scripts/lib/ruleset.ts",
 			"scripts/grep-gate.sh",
 			"scripts/agent-stop-gate.sh",
 			"bunfig.toml",

@@ -30,8 +30,19 @@ cpSync(ROOT, scratch, { recursive: true, filter: (src) => !SKIP.has(src.slice(RO
 symlinkSync(join(ROOT, "node_modules"), join(scratch, "node_modules"));
 
 const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// End-anchored: bun matches -t against the full name ("describe test"), so a
+// longer title that merely contains this one ("…, as reviewed") never runs.
 const runTest = (file: string, name: string) =>
-	Bun.spawnSync(["bun", "test", `./${file}`, "-t", escapeRe(name)], { cwd: scratch, stdout: "pipe", stderr: "pipe" });
+	Bun.spawnSync(["bun", "test", `./${file}`, "-t", `${escapeRe(name)}$`], {
+		cwd: scratch,
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+/** bun prints " N pass" / " N fail"; a baseline must run exactly one test. */
+const counts = (out: string) => ({
+	pass: Number(out.match(/^\s*(\d+) pass/m)?.[1] ?? -1),
+	fail: Number(out.match(/^\s*(\d+) fail/m)?.[1] ?? -1),
+});
 
 let survived = 0;
 try {
@@ -41,8 +52,9 @@ try {
 	for (const m of pairs) {
 		if (m.killedBy === CATALOGUE_TEST) throw new Error(`${CATALOGUE_TEST} cannot be a killedBy file`);
 		const baseline = runTest(m.killedBy, m.killedByTest);
-		if (baseline.exitCode !== 0) {
-			console.log(`mutate: unmutated, "${m.killedByTest}" in ${m.killedBy} does not pass (or matches no test):`);
+		const ran = counts(baseline.stdout.toString() + baseline.stderr.toString());
+		if (baseline.exitCode !== 0 || ran.pass !== 1 || ran.fail !== 0) {
+			console.log(`mutate: unmutated, "${m.killedByTest}" in ${m.killedBy} must run exactly one passing test:`);
 			console.log(baseline.stderr.toString().slice(-1500));
 			survived = -1;
 		}
@@ -63,7 +75,8 @@ try {
 		writeFileSync(file, original);
 		// A kill is a failed assertion. A crash (a ReferenceError from a stale
 		// replacement, a TypeError the mutant provokes) proves nothing about the test.
-		const asserted = /error: expect\(/.test(t.stderr.toString());
+		const out = t.stderr.toString();
+		const asserted = /error: expect\(/.test(out) && counts(t.stdout.toString() + out).fail === 1;
 		if (t.exitCode === 0) {
 			console.log(`SURVIVED ${m.id.padEnd(28)} ${m.why} ("${m.killedByTest}" still passes)`);
 			survived++;

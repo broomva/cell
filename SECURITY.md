@@ -17,8 +17,8 @@ These are the boundaries the tests and CI enforce. A change that weakens one is 
 | The environment is read in one file of the app | `scripts/grep-gate.sh`: any `process.env`, `globalThis`, `Bun.env`, `import.meta.env` or `process` import in `agent/` outside the provider |
 | No holon work starts that could outlive the grant (Claude Code is the only refresher) | `agent/lib/grant.ts`, mutants `grant-*` |
 | No secret is committed | gitleaks in the pre-commit hook (refuses the commit if gitleaks is missing) and in CI over the full history |
-| A PR cannot weaken the checks that judge it | `gate-guard`, run from `main`'s copy under `pull_request_target`, reading the PR through the API only; `bun run doctor` fails while `main`'s ruleset does not require it |
-| Agents in this repository cannot use the admin bypass, rewrite the ruleset or push to `main` | `scripts/agent-pretool-gate.ts` (Claude Code PreToolUse). Not covered: an agent outside this repository with the same admin token. A non-admin agent identity closes that. |
+| A PR cannot weaken the checks that judge it | `gate-guard`, run from `main`'s copy under `pull_request_target`, reading the PR through the API only. CI's required `gate` includes a `ruleset` job that fails while `main` does not require `gate` and `gate-guard` (bound to the Actions app). The PR that introduced `gate-guard` could not be checked by it and was merged by a human. |
+| Agents in this repository do not use the admin bypass, rewrite the ruleset or push to `main` by habit or instruction | `scripts/agent-pretool-gate.ts` (Claude Code PreToolUse) refuses the common and quote-split spellings and fails closed. **Not a boundary:** `eval`, variables, scripts or encodings evade a shell-text match, and an agent outside this repository is not covered. The boundary is a non-admin GitHub identity for agents (an owner decision). |
 
 ## Scope and use
 

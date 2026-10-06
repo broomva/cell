@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	dependencyRangeFindings,
+	importedNames,
 	lineFindings,
 	MODEL_PATH,
 	parseAddedLines,
@@ -91,6 +92,31 @@ describe("line rules", () => {
 	});
 });
 
+describe("importedNames", () => {
+	test("named, renamed, type, default, namespace and dynamic imports", () => {
+		const src = [
+			'import { a, b as c, type T } from "../agent/lib/provider";',
+			'import def, { e } from "../agent/lib/provider.ts";',
+			'import * as ns from "../agent/lib/provider";',
+			'import { z } from "../agent/lib/grant";',
+			'const { f, g: h } = await import("../agent/lib/provider");',
+		].join("\n");
+		expect(importedNames(src, "agent/lib/provider").sort()).toEqual(["T", "a", "c", "def", "e", "f", "h", "ns"].sort());
+		expect(importedNames(src, "agent/lib/grant")).toEqual(["z"]);
+		expect(importedNames(src, "agent/lib/missing")).toEqual([]);
+	});
+});
+
+describe("assertions on literals", () => {
+	test("are refused in tests", () => {
+		for (const lit of ["true", "false", "null", "1", "-2.5", '"x"', "'y'"]) {
+			expect(rules("test/a.test.ts", j("exp", "ect(", lit, ").toBe(x);"))).toContain("assertion-on-literal");
+		}
+		expect(rules("test/a.test.ts", "expect(resolveMode(env)).toBe(true);")).toEqual([]);
+		expect(rules("agent/a.ts", j("expect(", "true)"))).toEqual([]);
+	});
+});
+
 describe("dependency pins", () => {
 	test("exact versions pass", () => {
 		const ok = JSON.stringify({
@@ -121,7 +147,7 @@ describe("source needs a test that imports it and asserts", () => {
 		"test/surface.test.ts": "// eve info",
 	};
 	const read = (p: string) => files[p] ?? "";
-	const assertion = (path: string) => ({ path, line: 1, text: "\texpect(x).toBe(1);" });
+	const assertion = (path: string, text = "\texpect(resolveMode(env)).toEqual(mode);") => ({ path, line: 1, text });
 	const whitespace = (path: string) => ({ path, line: 1, text: "" });
 
 	test("a changed test that imports the module and adds an assertion", () => {
@@ -135,6 +161,16 @@ describe("source needs a test that imports it and asserts", () => {
 				[assertion("test/provider.test.ts")],
 			),
 		).toEqual([]);
+	});
+
+	test("an unrelated or literal assertion in an importing test does not count", () => {
+		const changes = [
+			{ status: "M" as const, path: "agent/lib/provider.ts" },
+			{ status: "M" as const, path: "test/provider.test.ts" },
+		];
+		for (const text of ["\texpect(other(1)).toBe(2);", j("\texpect(", "true).toBe(true);")]) {
+			expect(untestedChangeFindings(changes, read, [assertion("test/provider.test.ts", text)])).toHaveLength(1);
+		}
 	});
 
 	test("a name mention, or an importing test touched without an assertion, does not count", () => {
@@ -184,6 +220,17 @@ describe("source needs a test that imports it and asserts", () => {
 			]),
 		).toEqual([]);
 		expect(untestedChangeFindings([tool], read, [])).toHaveLength(1);
+		// agent/lib can be imported, so the surface test does not excuse it
+		expect(
+			untestedChangeFindings(
+				[
+					{ status: "M", path: "agent/lib/provider.ts" },
+					{ status: "M", path: "test/surface.test.ts" },
+				],
+				read,
+				[assertion("test/surface.test.ts")],
+			),
+		).toHaveLength(1);
 		// scripts/lib has no such fallback
 		expect(
 			untestedChangeFindings(
@@ -195,6 +242,14 @@ describe("source needs a test that imports it and asserts", () => {
 				[assertion("test/surface.test.ts")],
 			),
 		).toHaveLength(1);
+	});
+
+	test("a literal assertion does not cover a slot", () => {
+		const tool = { status: "M" as const, path: "agent/tools/bash.ts" };
+		const literal = assertion("test/surface.test.ts", j("\texpect(", "true).toBe(true);"));
+		expect(untestedChangeFindings([tool, { status: "M", path: "test/surface.test.ts" }], read, [literal])).toHaveLength(
+			1,
+		);
 	});
 
 	test("docs, deletions and top-level CLIs are out of scope", () => {
@@ -234,14 +289,14 @@ describe("PR body evidence", () => {
 	test("a model-path change needs a live eval result or a stated reason", () => {
 		const model = { mutants: 22, modelPath: true };
 		const base = `## Verification\n${verdict(22)}\n`;
-		expect(rulesOf(base, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(base, model)).toEqual(["pr-live-status"]);
 		expect(rulesOf(`${base}Results: 2 passed (2 total)\n`, model)).toEqual([]);
-		expect(rulesOf(`${base}Results: 1 passed (2 total)\n`, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(`${base}Results: 1 passed (2 total)\n`, model)).toEqual(["pr-live-status"]);
 		expect(rulesOf(`${base}Live eval not run: the grant is expired and D13 forbids refreshing it\n`, model)).toEqual(
 			[],
 		);
-		expect(rulesOf(`${base}Live eval not run: no\n`, model)).toEqual(["pr-live-evidence"]);
-		expect(rulesOf(`${base}<!-- Results: 2 passed (2 total) -->\n`, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(`${base}Live eval not run: no\n`, model)).toEqual(["pr-live-status"]);
+		expect(rulesOf(`${base}<!-- Results: 2 passed (2 total) -->\n`, model)).toEqual(["pr-live-status"]);
 	});
 
 	test("which files are on the model path", () => {

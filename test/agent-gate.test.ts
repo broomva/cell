@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { commands, refusals } from "../scripts/lib/agent-gate";
+import { commands, dequote, refusals } from "../scripts/lib/agent-gate";
 
 const ids = (line: string) => refusals(line).map((r) => r.rule);
 
@@ -44,8 +44,43 @@ describe("agent gate refuses", () => {
 		expect(ids("gh repo view broomva/cell")).toEqual([]);
 	});
 
+	test("quote-split and escaped spellings", () => {
+		expect(ids('gh pr merge 1 --adm""in')).toEqual(["admin-merge"]);
+		expect(ids("git push origin m'a'in")).toEqual(["push-main"]);
+		expect(ids('git push --forc""e origin feat/x')).toEqual(["force-push"]);
+		expect(ids('git push origin "main"')).toEqual(["push-main"]);
+		expect(ids("git push origin \\main")).toEqual(["push-main"]);
+		expect(dequote(`a"b"'c'\\d$'e'`)).toBe("abcde");
+	});
+
+	test("other write spellings: --method=, fields, graphql mutations, the merge and refs endpoints", () => {
+		expect(ids("gh api --method=PATCH repos/o/r/rulesets/1")).toEqual(["protection-write"]);
+		expect(ids("gh api -XPUT repos/o/r/rulesets/1")).toEqual(["protection-write"]);
+		expect(ids("gh api repos/o/r/rulesets -f name=x")).toEqual(["protection-write"]);
+		expect(ids("gh api repos/o/r/rulesets --input r.json")).toEqual(["protection-write"]);
+		expect(ids("gh api -X PUT repos/o/r/pulls/1/merge")).toEqual(["protection-write"]);
+		expect(ids("gh api repos/o/r/git/refs/heads/main -X PATCH -F force=true")).toEqual(["protection-write"]);
+		expect(ids("gh api repos/o/r/contents/.github/workflows/ci.yml -X PUT -f branch=main")).toEqual([
+			"protection-write",
+		]);
+		expect(ids("gh api graphql -f query='mutation{updateRepositoryRuleset(input:{}){x}}'")).toEqual([
+			"protection-write",
+		]);
+		expect(ids("gh api graphql -f query='query{viewer{login}}'")).toEqual([]);
+		expect(ids("gh api repos/o/r/pulls/1/files --paginate")).toEqual([]);
+	});
+
+	test("one-shot hook bypasses and the raw token", () => {
+		expect(ids("git -c core.hooksPath=/dev/null commit -m x")).toEqual(["hooks-path"]);
+		expect(ids("git commit -n -m x")).toEqual(["skip-hooks"]);
+		expect(ids("git commit -am x")).toEqual([]);
+		expect(ids('curl -H "Authorization: token $(gh auth token)" https://api.github.com')).toContain("raw-token");
+		expect(ids("echo $GH_TOKEN")).toEqual(["raw-token"]);
+	});
+
 	test("a refused command hidden behind a separator", () => {
 		expect(ids("echo hi && gh pr merge 3 --admin")).toEqual(["admin-merge"]);
+		expect(ids("echo $(gh pr merge 3 --admin)")).toEqual(["admin-merge"]);
 		expect(commands("a; b | c && d\ne")).toEqual(["a", "b", "c", "d", "e"]);
 	});
 });
@@ -54,7 +89,7 @@ describe("agent gate hook", () => {
 	const hook = join(import.meta.dir, "../scripts/agent-pretool-gate.ts");
 	const run = (stdin: string) => {
 		const p = Bun.spawnSync(["bun", hook], { stdin: new TextEncoder().encode(stdin), stderr: "pipe" });
-		return { code: p.exitCode, err: p.stderr.toString() };
+		return { code: p.exitCode, err: new TextDecoder().decode(p.stderr) };
 	};
 
 	test("blocks with exit 2 and says why", () => {

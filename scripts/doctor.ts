@@ -4,7 +4,6 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { checkGrant } from "../agent/lib/grant";
-import { rulesetGaps } from "./lib/ruleset";
 import { preToolUseSurfaces } from "./lib/surfaces";
 
 const target = resolve(process.argv[2] ?? process.cwd());
@@ -69,13 +68,19 @@ if (hp.out.trim() !== ".githooks") fail("hooks", `core.hooksPath is "${hp.out.tr
 pass("hooks", "core.hooksPath = .githooks");
 
 // 8. main's ruleset requires both gates, bound to the Actions app
-const repo = run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).out.trim();
-const rs = run(["gh", "api", `repos/${repo}/rules/branches/main`]);
-let gaps: string[] = ["could not read the ruleset"];
-try {
-	if (rs.code === 0) gaps = rulesetGaps(JSON.parse(rs.out));
-} catch {}
-if (gaps.length > 0) fail("ruleset", gaps.join("; "));
+// The cell's own repository, resolved from this checkout, not from the cwd.
+const cellRoot = resolve(import.meta.dir, "..");
+const remote = run(["git", "-C", cellRoot, "remote", "get-url", "origin"]).out.trim();
+const repo = remote.match(/github\.com[:/]([^/]+\/[^/.]+)/)?.[1] ?? "";
+const rs = run(["bun", resolve(cellRoot, "scripts/ruleset-check.ts"), repo]);
+if (!repo || rs.code !== 0)
+	fail(
+		"ruleset",
+		rs.out
+			.split("\n")
+			.filter((l) => l.startsWith("RULESET"))
+			.join("; ") || `could not resolve the repository from ${remote}`,
+	);
 pass("ruleset", "main: PRs only, no force push or deletion, gate + gate-guard required");
 
 // 9. D13: how long the grant has, against a one-attempt, ten-minute budget

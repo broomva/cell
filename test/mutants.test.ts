@@ -20,15 +20,24 @@ describe("mutant catalogue", () => {
 		for (const m of MUTANTS) {
 			expect(existsSync(join(ROOT, m.killedBy))).toBe(true);
 			expect(m.killedBy).not.toBe("test/mutants.test.ts");
-			expect(readFileSync(join(ROOT, m.killedBy), "utf8")).toContain(m.killedByTest);
+			// Exactly one test is titled exactly this; no other title in the file ends with it.
+			const src = readFileSync(join(ROOT, m.killedBy), "utf8");
+			const titles = [...src.matchAll(/\btest\(\s*"((?:[^"\\]|\\.)*)"/g)].map((x) => x[1] ?? "");
+			expect({ id: m.id, exact: titles.filter((x) => x === m.killedByTest).length }).toEqual({ id: m.id, exact: 1 });
+			expect({ id: m.id, suffix: titles.filter((x) => x.endsWith(m.killedByTest)).length }).toEqual({
+				id: m.id,
+				suffix: 1,
+			});
 		}
 	});
 
 	// A test that pins a module's source text fails for every mutant of that
 	// module without checking any behaviour. Tests that kill mutants assert
-	// what the code does, never what it says.
+	// what the code does, never what it says: no file reads, no function
+	// source (toString), no snapshots.
 	test("no killedBy file reads source text", () => {
-		const reads = /readFileSync|readFile\(|Bun\.file\(|with\s*\{\s*type:\s*["']text["']|node:fs\/promises/;
+		const reads =
+			/readFileSync|readFile\(|Bun\.file\(|with\s*\{\s*type:\s*["']text["']|node:fs\/promises|\.toString\(\s*\)|Function\.prototype|toMatch(Inline)?Snapshot/;
 		for (const file of new Set(MUTANTS.map((m) => m.killedBy))) {
 			expect({ file, reads: reads.test(readFileSync(join(ROOT, file), "utf8")) }).toEqual({ file, reads: false });
 		}

@@ -33,8 +33,9 @@ function eveInfo(): { tools: string[] } {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
-	if (proc.exitCode !== 0) throw new Error(`eve info failed (${proc.exitCode}): ${proc.stderr.toString()}`);
-	return JSON.parse(proc.stdout.toString());
+	if (proc.exitCode !== 0)
+		throw new Error(`eve info failed (${proc.exitCode}): ${new TextDecoder().decode(proc.stderr)}`);
+	return JSON.parse(new TextDecoder().decode(proc.stdout));
 }
 
 describe("root agent surface", () => {
