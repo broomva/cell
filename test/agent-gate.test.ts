@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { commands, dequote, refusals } from "../scripts/lib/agent-gate";
+import { commands, commitSkipsHooks, dequote, refusals } from "../scripts/lib/agent-gate";
 
 const ids = (line: string) => refusals(line).map((r) => r.rule);
 
@@ -74,8 +74,38 @@ describe("agent gate refuses", () => {
 		expect(ids("git -c core.hooksPath=/dev/null commit -m x")).toEqual(["hooks-path"]);
 		expect(ids("git commit -n -m x")).toEqual(["skip-hooks"]);
 		expect(ids("git commit -am x")).toEqual([]);
+		expect(commitSkipsHooks("git commit --amend --no-edit -n")).toBe(true);
+		expect(commitSkipsHooks("git commit -- -n")).toBe(false);
+		expect(commitSkipsHooks("git log -n 3")).toBe(false);
 		expect(ids('curl -H "Authorization: token $(gh auth token)" https://api.github.com')).toContain("raw-token");
 		expect(ids("echo $GH_TOKEN")).toEqual(["raw-token"]);
+	});
+
+	test("ANSI-C quoting and line continuations in git or gh commands", () => {
+		expect(ids("gh pr merge 1 --$'\\x61dmin'")).toContain("obfuscated");
+		expect(ids("gh pr merge 1 --$'\\141dmin'")).toContain("obfuscated");
+		expect(ids("gh pr merge 1 --adm\\\nin")).toEqual(["obfuscated", "admin-merge"]);
+		expect(ids("printf $'a\\tb'")).toEqual([]);
+	});
+
+	test("parentheses inside an argument do not fragment the command", () => {
+		const mutation =
+			"gh api graphql -H \"X-Note: (ok)\" -f query='mutation{updateRepositoryRuleset(input:{rulesetId:1}){ruleset{id}}}'";
+		expect(ids(mutation)).toEqual(["protection-write"]);
+	});
+
+	test("ordinary work is not refused", () => {
+		expect(ids('git commit -m "test: drop the -only flag"')).toEqual([]);
+		expect(ids("git commit -am 'fix -n handling'")).toEqual([]);
+		expect(ids("grep -n GH_TOKEN .github/workflows/gate-guard.yml")).toEqual([]);
+		expect(ids("git commit -an -m x")).toEqual(["skip-hooks"]);
+		expect(ids("git commit README.md -n -m x")).toEqual(["skip-hooks"]);
+		expect(ids('git commit -m "x" -n')).toEqual(["skip-hooks"]);
+		expect(ids('git commit -m "a -n b" README.md')).toEqual([]);
+		expect(ids("git commit -m '-nothing to see'")).toEqual([]);
+		expect(ids("git commit -m -nothing")).toEqual([]);
+		expect(ids('git commit -""n -m x')).toEqual(["skip-hooks"]);
+		expect(ids("GH_TOKEN=abc gh api user")).toEqual(["raw-token"]);
 	});
 
 	test("a refused command hidden behind a separator", () => {

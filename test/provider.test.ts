@@ -64,7 +64,7 @@ describe("api mode ignores a stray base URL in the process", () => {
 		let seen = "";
 		const realFetch = globalThis.fetch;
 		globalThis.fetch = (async (input: RequestInfo | URL) => {
-			seen = String(input instanceof Request ? input.url : input);
+			seen = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
 			return new Response(JSON.stringify({ error: { type: "stop", message: "stop" } }), { status: 400 });
 		}) as typeof fetch;
 		try {

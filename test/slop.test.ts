@@ -99,10 +99,11 @@ describe("importedNames", () => {
 			'import def, { e } from "../agent/lib/provider.ts";',
 			'import * as ns from "../agent/lib/provider";',
 			'import { z } from "../agent/lib/grant";',
+			'import type { Budget } from "../agent/lib/grant";',
 			'const { f, g: h } = await import("../agent/lib/provider");',
 		].join("\n");
 		expect(importedNames(src, "agent/lib/provider").sort()).toEqual(["T", "a", "c", "def", "e", "f", "h", "ns"].sort());
-		expect(importedNames(src, "agent/lib/grant")).toEqual(["z"]);
+		expect(importedNames(src, "agent/lib/grant")).toEqual(["z", "Budget"]);
 		expect(importedNames(src, "agent/lib/missing")).toEqual([]);
 	});
 });

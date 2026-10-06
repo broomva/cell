@@ -34,10 +34,10 @@ describe("mutant catalogue", () => {
 	// A test that pins a module's source text fails for every mutant of that
 	// module without checking any behaviour. Tests that kill mutants assert
 	// what the code does, never what it says: no file reads, no function
-	// source (toString), no snapshots.
+	// source (toString, String()), no snapshots.
 	test("no killedBy file reads source text", () => {
 		const reads =
-			/readFileSync|readFile\(|Bun\.file\(|with\s*\{\s*type:\s*["']text["']|node:fs\/promises|\.toString\(\s*\)|Function\.prototype|toMatch(Inline)?Snapshot/;
+			/readFileSync|readFile\(|Bun\.file\(|with\s*\{\s*type:\s*["']text["']|node:fs\/promises|\.toString\(\s*\)|\bString\(|Function\.prototype|toMatch(Inline)?Snapshot/;
 		for (const file of new Set(MUTANTS.map((m) => m.killedBy))) {
 			expect({ file, reads: reads.test(readFileSync(join(ROOT, file), "utf8")) }).toEqual({ file, reads: false });
 		}

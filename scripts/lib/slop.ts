@@ -189,7 +189,7 @@ export function importedNames(testSource: string, modulePath: string): string[] 
 	const spec = `["'](?:\\.{1,2}/)+${escapeRe(modulePath)}(?:\\.ts)?["']`;
 	const names: string[] = [];
 	for (const m of testSource.matchAll(new RegExp(`import\\s+([^;]*?)\\s+from\\s+${spec}`, "g"))) {
-		const clause = m[1] ?? "";
+		const clause = (m[1] ?? "").replace(/^type\s+/, "");
 		const braces = clause.match(/\{([^}]*)\}/)?.[1] ?? "";
 		for (const part of braces.split(",")) {
 			const name = part

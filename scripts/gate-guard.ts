@@ -21,10 +21,16 @@ if (listed === null) {
 	process.exit(2);
 }
 const files = (JSON.parse(listed) as PrFile[][]).flat();
-const pr = gh(["api", `repos/${REPO}/pulls/${PR}`, "--jq", ".changed_files"]);
-if (pr === null || !/^\d+$/.test(pr.trim())) {
-	console.error("gate-guard: could not read the PR's changed_files count");
+// The file list is the PR's current one; it must belong to the head this run reports on.
+const pr = gh(["api", `repos/${REPO}/pulls/${PR}`, "--jq", '"\\(.changed_files) \\(.head.sha)"']);
+const [count = "", head = ""] = (pr ?? "").trim().split(" ");
+if (!/^\d+$/.test(count) || !head) {
+	console.error("gate-guard: could not read the PR's changed_files count and head");
 	process.exit(2);
+}
+if (head !== HEAD_SHA) {
+	console.error(`gate-guard: the PR moved from ${HEAD_SHA} to ${head}; the run for the new head decides`);
+	process.exit(1);
 }
 
 const blob = (sha: string) =>
@@ -44,7 +50,7 @@ if (pkgFile) {
 	pkg = packageFindings(base, head);
 }
 
-const findings = [...completeness(files.length, Number(pr.trim())), ...fileFindings(files), ...pkg];
+const findings = [...completeness(files.length, Number(count)), ...fileFindings(files), ...pkg];
 for (const f of findings) console.log(`GUARDED ${f.path} — ${f.reason}`);
 console.log(`gate-guard: ${files.length} file(s); ${findings.length} guarded change(s)`);
 if (findings.length > 0) {

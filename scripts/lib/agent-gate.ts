@@ -27,6 +27,40 @@ const GH_WRITE = /(\s|^)(-X|--method|-f|-F|--field|--raw-field|--input)(\s|=|[A-
 const PROTECTED_API =
 	/(rulesets|\/protection|\/collaborators|actions\/permissions|\/git\/refs|\/contents\/|\/pulls\/\d+\/merge|\/merges\b)/;
 
+/** Shell words of one command, quotes kept together and then removed, so a quoted message is one word. */
+export function words(raw: string): string[] {
+	return (raw.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []).map((w) => dequote(w));
+}
+
+/**
+ * `git commit -n` skips the hooks. git reads options anywhere before `--`, so
+ * every word after `commit` is checked, except the value of -m/-F/--message/
+ * --file: `-n` inside a message ("drop the -only flag") is text, not a flag.
+ * Judged on raw text, before dequoting merges a quoted message into words.
+ */
+export function commitSkipsHooks(raw: string): boolean {
+	const w = words(raw);
+	const at = w.indexOf("commit");
+	if (at < 0 || !w.slice(0, at).includes("git")) return false;
+	for (let i = at + 1; i < w.length; i++) {
+		const t = w[i] ?? "";
+		if (t === "--") return false;
+		if (t === "--no-edit" || t === "--amend") continue;
+		if (/^--(message|file)$/.test(t)) {
+			i++;
+			continue;
+		}
+		if (/^-[a-zA-Z]+$/.test(t)) {
+			const flags = t.slice(1);
+			const value = flags.search(/[mF]/);
+			const n = flags.indexOf("n");
+			if (n >= 0 && (value < 0 || n < value)) return true;
+			if (value >= 0 && value === flags.length - 1) i++;
+		}
+	}
+	return false;
+}
+
 export const RULES: Rule[] = [
 	{
 		rule: "admin-merge",
@@ -43,7 +77,7 @@ export const RULES: Rule[] = [
 	{
 		rule: "raw-token",
 		why: "the GitHub token is not handed to other tools; use gh, which this hook can see",
-		test: (c) => has(c, /\bgh\s+auth\s+token\b/) || has(c, /GH_TOKEN|GITHUB_TOKEN/),
+		test: (c) => has(c, /\bgh\s+auth\s+token\b/) || has(c, /\$\{?(GH|GITHUB)_TOKEN\b|\b(GH|GITHUB)_TOKEN=/),
 	},
 	{
 		rule: "force-push",
@@ -59,7 +93,7 @@ export const RULES: Rule[] = [
 	{
 		rule: "skip-hooks",
 		why: "the git hooks are the local gate; never bypass them",
-		test: (c) => has(c, /\bgit\b/) && (has(c, NO_VERIFY) || has(c, /\bcommit\b.*\s-[a-zA-Z]*n[a-zA-Z]*\b/)),
+		test: (c) => has(c, /\bgit\b/) && has(c, NO_VERIFY),
 	},
 	{
 		rule: "hooks-path",
@@ -68,6 +102,11 @@ export const RULES: Rule[] = [
 			has(c, /core\.hookspath/i) &&
 			!has(c, /^\s*git\s+config\s+(--local\s+)?core\.hooksPath\s+\.githooks\s*$/i) &&
 			!has(c, /^\s*git\s+config\s+(--get\s+)?core\.hooksPath\s*$/i),
+	},
+	{
+		rule: "obfuscated",
+		why: "ANSI-C quoting or a line continuation in a git or gh command hides what it runs; spell it plainly",
+		test: (c) => has(c, /\b(git|gh)\b/) && has(c, /\$'|\\\n/),
 	},
 	{
 		rule: "visibility",
@@ -85,17 +124,35 @@ export function dequote(line: string): string {
 }
 
 /** Split a shell line on separators so each command is judged on its own. */
+/** Command separators, and the start of a command substitution. A bare `)` is not one. */
+const SEPARATORS = /&&|\|\||;|\||\n|\$\(|`/;
+
+/**
+ * Split a shell line into commands: on separators and at the start of a
+ * command substitution. A bare `)` is not a separator, so parentheses inside
+ * an argument (a GraphQL input object) do not fragment the command around them.
+ */
 export function commands(line: string): string[] {
-	return dequote(line)
-		.split(/&&|\|\||;|\||\n|\$\(|`|\)/)
+	return dequote(line.replace(/\\\n/g, ""))
+		.split(SEPARATORS)
 		.map((s) => s.trim())
 		.filter(Boolean);
 }
 
+const OBFUSCATION = RULES.find((r) => r.rule === "obfuscated");
+
 export function refusals(line: string): Refusal[] {
 	const out: Refusal[] = [];
-	for (const cmd of commands(line)) {
-		for (const r of RULES) if (r.test(cmd)) out.push({ rule: r.rule, why: r.why });
+	// Obfuscation is judged on the raw text, before dequoting erases it.
+	if (OBFUSCATION?.test(line)) out.push({ rule: OBFUSCATION.rule, why: OBFUSCATION.why });
+	const parts = commands(line);
+	for (const cmd of parts) {
+		for (const r of RULES) if (r !== OBFUSCATION && r.test(cmd)) out.push({ rule: r.rule, why: r.why });
+	}
+	// commit -n is judged on the raw segments, where a quoted message is still one word.
+	const raw = line.replace(/\\\n/g, "").split(SEPARATORS);
+	if (!out.some((r) => r.rule === "skip-hooks") && raw.some(commitSkipsHooks)) {
+		out.push({ rule: "skip-hooks", why: "the git hooks are the local gate; never bypass them" });
 	}
 	return out;
 }
