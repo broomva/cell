@@ -66,7 +66,7 @@ describe("line rules", () => {
 		expect(rules("agent/a.ts", j("// @ts-", "expect-error eve types lag the runtime"))).toEqual([]);
 	});
 
-	test("a TODO names its ticket; markdown is exempt", () => {
+	test("a to-do comment names its ticket; markdown is exempt", () => {
 		expect(rules("agent/a.ts", j("// TO", "DO fix later"))).toContain("todo-without-ticket");
 		expect(rules("agent/a.ts", j("// TO", "DO(BRO-2855) wire the spawn helper"))).toEqual([]);
 		expect(rules("agent/a.ts", j("// FIX", "ME see #12"))).toEqual([]);
