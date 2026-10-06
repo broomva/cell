@@ -32,3 +32,11 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bun scripts/gate-guard.ts
+      # main's copy of the ruleset check: unlike the one in ci.yml's gate, a PR
+      # cannot edit this one. Runs even when the guard above failed.
+      - name: ruleset
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bun scripts/ruleset-check.ts

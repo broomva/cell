@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The billing mode lives in one file. In agent/ (the app eve runs), only the
-# provider (and from S3 the one spawn helper) may name ANTHROPIC_ or touch the
-# environment at all. No test or eval reads the real key. Exit 1 names every
+# provider may name ANTHROPIC_ or touch the environment at all. (S3's spawn
+# helper joins it in the PR that creates it, which is a guarded change.) No test or eval reads the real key. Exit 1 names every
 # offending line. A grep, not a parser: it refuses broad patterns on purpose.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 B='(^|[^A-Za-z0-9_$])'
 E='([^A-Za-z0-9_$]|$)'
 
-allowed='^(agent/lib/provider\.ts|agent/lib/holon\.ts):'
+allowed='^agent/lib/provider\.ts:'
 fail=0
 report() { echo "grep-gate: $1"; echo "$2"; fail=1; }
 

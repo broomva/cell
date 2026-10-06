@@ -32,7 +32,10 @@ const TEST = /(^test\/|\.test\.ts$|\.eval\.ts$)/;
 const TICKET = /(\b[A-Z]{2,}-\d+\b|#\d+\b)/;
 /** This file spells out every pattern it bans. It is exempt from the line rules; the gate guard holds it instead. */
 const SELF = /^scripts\/lib\/slop\.ts$/;
-const LITERAL_ASSERTION = /\bexpect\(\s*(true|false|null|undefined|-?\d+(\.\d+)?|"[^"]*"|'[^']*')\s*\)/;
+const LITERAL_ASSERTION = /\bexpect\(\s*(true|false|null|undefined|-?\d+(\.\d+)?|"[^"]*"|'[^']*'|`[^`$]*`)\s*\)/;
+/** A line with its string literals and trailing comment removed, so a name inside a string is not a use. */
+const code = (line: string) =>
+	line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""').replace(/\/\/.*$/, "");
 
 interface LineRule {
 	id: string;
@@ -232,7 +235,7 @@ export function untestedChangeFindings(
 			const names = importedNames(readFile(t.path), modulePath);
 			return (
 				names.length > 0 &&
-				assertions(t.path).some((l) => names.some((n) => new RegExp(`\\b${escapeRe(n)}\\b`).test(l.text)))
+				assertions(t.path).some((l) => names.some((n) => new RegExp(`\\b${escapeRe(n)}\\b`).test(code(l.text))))
 			);
 		});
 		const slot =

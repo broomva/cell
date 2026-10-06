@@ -109,7 +109,7 @@ describe("importedNames", () => {
 
 describe("assertions on literals", () => {
 	test("are refused in tests", () => {
-		for (const lit of ["true", "false", "null", "1", "-2.5", '"x"', "'y'"]) {
+		for (const lit of ["true", "false", "null", "1", "-2.5", '"x"', "'y'", "`z`"]) {
 			expect(rules("test/a.test.ts", j("exp", "ect(", lit, ").toBe(x);"))).toContain("assertion-on-literal");
 		}
 		expect(rules("test/a.test.ts", "expect(resolveMode(env)).toBe(true);")).toEqual([]);
@@ -161,6 +161,26 @@ describe("source needs a test that imports it and asserts", () => {
 				[assertion("test/provider.test.ts")],
 			),
 		).toEqual([]);
+	});
+
+	test("an imported name inside a string or comment is not a use", () => {
+		const changes = [
+			{ status: "M" as const, path: "agent/lib/provider.ts" },
+			{ status: "M" as const, path: "test/provider.test.ts" },
+		];
+		for (const text of [
+			'\texpect(other()).toBe("resolveMode");',
+			"\texpect(other()).toBe(`resolveMode`);",
+			"\texpect(other()).toBe(1); // resolveMode",
+		]) {
+			expect({
+				text,
+				n: untestedChangeFindings(changes, read, [assertion("test/provider.test.ts", text)]).length,
+			}).toEqual({
+				text,
+				n: 1,
+			});
+		}
 	});
 
 	test("an unrelated or literal assertion in an importing test does not count", () => {

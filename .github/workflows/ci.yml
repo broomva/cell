@@ -106,6 +106,9 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash | bash -s -- 1.7.12
           ./actionlint -color
 
+  # Blocks every PR while main's ruleset is incomplete. This copy runs PR code,
+  # so a PR that also edits scripts/ruleset-check.ts could silence it; that
+  # edit is guarded, and gate-guard runs main's copy of the same check.
   ruleset:
     name: ruleset (main requires gate and gate-guard, bound to Actions)
     runs-on: ubuntu-latest

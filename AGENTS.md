@@ -76,7 +76,7 @@ PreToolUse hook is a speed bump, not a wall: working around it is a violation of
 
 - The root agent never gets a shell, file, fetch, search or self-copy tool. Code work is a holon unit, behind the
   workspace's PreToolUse gate. Adding a tool means adding it to `ALLOWED` in `test/surface.test.ts` with a reason.
-- `ANTHROPIC_*` is read in `agent/lib/provider.ts` only (and `agent/lib/holon.ts` from S3). `scripts/grep-gate.sh`
+- `ANTHROPIC_*` and the environment are read in `agent/lib/provider.ts` only; S3's spawn helper joins it in a guarded PR. `scripts/grep-gate.sh`
   enforces it.
 - Every `holon factory` start passes `--task-timeout`, `--max-requeues` and `--max-pause` explicitly
   (`budgetArgv`) and runs `checkLiveGrant` first.

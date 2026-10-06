@@ -61,8 +61,10 @@ list through the API and never runs PR code, so a PR cannot weaken it. It fails 
   `patchedDependencies`, `imports`, …)
 - lists fewer files than the PR changes (GitHub caps the list at 3000): it fails closed
 
-A guarded PR needs a human: review it, then merge with the ruleset's admin bypass. CI's `ruleset` job (inside the
-required `gate`) fails while `main` stops requiring `gate` or `gate-guard`.
+A guarded PR needs a human: review it, then merge with the ruleset's admin bypass. A `ruleset` check fails while
+`main` stops requiring `gate` or `gate-guard`: CI's copy inside the required `gate` blocks every PR, and `gate-guard`
+runs `main`'s copy, which a PR cannot edit. An admin can still remove the requirements and merge; the checks make that
+visible, they do not prevent it.
 
 GitHub cannot tell an agent from you when they share a token. The repository's Claude Code hook
 (`scripts/agent-pretool-gate.ts`) refuses agents the common spellings of the bypass, ruleset and protection writes,
