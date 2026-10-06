@@ -347,6 +347,15 @@ export const MUTANTS: Mutant[] = [
 		why: '--adm""in would slip past every rule',
 	},
 	{
+		id: "grep-gate-env-scope",
+		file: "scripts/grep-gate.sh",
+		find: 'import\\\\.meta" -- agent',
+		replace: 'import\\\\.meta" -- nowhere',
+		killedBy: "test/grep-gate.test.ts",
+		killedByTest: "every spelling of environment access in agent/ is refused",
+		why: "the environment rule would scan nothing and pass",
+	},
+	{
 		id: "ruleset-unbound-check",
 		file: "scripts/lib/ruleset.ts",
 		find: "else if (c.integration_id !== ACTIONS_APP_ID)",
