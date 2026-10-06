@@ -33,11 +33,28 @@ const TICKET = /(\b[A-Z]{2,}-\d+\b|#\d+\b)/;
 /** This file spells out every pattern it bans. It is exempt from the line rules; the gate guard holds it instead. */
 const SELF = /^scripts\/lib\/slop\.ts$/;
 const LITERAL_ASSERTION = /\bexpect\(\s*(true|false|null|undefined|-?\d+(\.\d+)?|"[^"]*"|'[^']*'|`[^`$]*`)\s*\)/;
+/** The ${…} expressions of a template literal, scanned with brace depth so nested objects stay whole. */
+export function templateExpressions(t: string): string[] {
+	const out: string[] = [];
+	for (let i = 0; i < t.length; i++) {
+		if (t[i] !== "$" || t[i + 1] !== "{") continue;
+		let depth = 1;
+		let j = i + 2;
+		for (; j < t.length && depth > 0; j++) {
+			if (t[j] === "{") depth++;
+			else if (t[j] === "}") depth--;
+		}
+		out.push(t.slice(i + 2, j - 1));
+		i = j - 1;
+	}
+	return out;
+}
+
 /** A line with its string literals and trailing comment removed, so a name inside a string is not a use. */
 const code = (line: string) =>
 	line
 		// A template literal keeps its ${…} expressions: they are code.
-		.replace(/`(?:[^`\\]|\\.)*`/g, (t) => [...t.matchAll(/\$\{([^}]*)\}/g)].map((x) => x[1]).join(" ") || '""')
+		.replace(/`(?:[^`\\]|\\.)*`/g, (t) => templateExpressions(t).join(" ") || '""')
 		.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
 		.replace(/\/\/.*$/, "");
 

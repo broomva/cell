@@ -331,7 +331,7 @@ export const MUTANTS: Mutant[] = [
 	{
 		id: "agent-gate-force-push",
 		file: "scripts/lib/agent-gate.ts",
-		find: "/(\\s--force(-with-lease|-if-includes)?\\b|\\s-[a-zA-Z]*f[a-zA-Z]*\\b|\\s\\+\\S|\\s--(mirror|prune|all|delete)\\b|\\s:\\S)/",
+		find: "/(\\s--force(-with-lease|-if-includes)?\\b|\\s-[a-zA-Z]*f[a-zA-Z]*\\b|\\s\\+\\S|\\s--(mirror|prune|all|delete)\\b|\\s-[a-zA-Z]*d[a-zA-Z]*\\b|\\s:\\S)/",
 		replace: "/\\s--force\\b/",
 		killedBy: "test/agent-gate.test.ts",
 		killedByTest: "force pushes and pushes to main",
@@ -403,7 +403,7 @@ export const MUTANTS: Mutant[] = [
 	{
 		id: "slop-template-expression",
 		file: "scripts/lib/slop.ts",
-		find: '.replace(/`(?:[^`\\\\]|\\\\.)*`/g, (t) => [...t.matchAll(/\\$\\{([^}]*)\\}/g)].map((x) => x[1]).join(" ") || \'""\')',
+		find: '.replace(/`(?:[^`\\\\]|\\\\.)*`/g, (t) => templateExpressions(t).join(" ") || \'""\')',
 		replace: ".replace(/`(?:[^`\\\\]|\\\\.)*`/g, '\"\"')",
 		killedBy: "test/slop.test.ts",
 		killedByTest: "a name used inside a template expression is a use",
@@ -426,6 +426,24 @@ export const MUTANTS: Mutant[] = [
 		killedBy: "test/agent-gate.test.ts",
 		killedByTest: "hook bypass and hook-path changes",
 		why: "setting core.hooksPath to .githooks would be refused, so agents could not repair it",
+	},
+	{
+		id: "slop-template-depth",
+		file: "scripts/lib/slop.ts",
+		find: 'if (t[j] === "{") depth++;',
+		replace: "if (false) depth++;",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "a name used inside a template expression is a use",
+		why: "a nested object in ${\u2026} would cut the expression short",
+	},
+	{
+		id: "agent-gate-local-position",
+		file: "scripts/lib/agent-gate.ts",
+		find: 'const w = all[2] === "--local" ? [...all.slice(0, 2), ...all.slice(3)] : all;',
+		replace: 'const w = all.filter((x) => x !== "--local");',
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "hook bypass and hook-path changes",
+		why: 'core.hooksPath "--local" ".githooks" would pass as the allowed form',
 	},
 	{
 		id: "ruleset-unbound-check",

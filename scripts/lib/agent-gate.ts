@@ -39,7 +39,9 @@ export function words(raw: string): string[] {
  */
 export function hooksPathChange(raw: string): boolean {
 	if (!/core\.hookspath/i.test(raw)) return false;
-	const w = words(raw).filter((x) => x !== "--local");
+	// --local is allowed only as the option right after `config`, never anywhere else.
+	const all = words(raw);
+	const w = all[2] === "--local" ? [...all.slice(0, 2), ...all.slice(3)] : all;
 	const isGit = (x: string | undefined) => x === "git" || !!x?.endsWith("/git");
 	const read =
 		(w.length === 3 && isGit(w[0]) && w[1] === "config" && w[2] === "core.hooksPath") ||
@@ -104,7 +106,7 @@ export const RULES: Rule[] = [
 			has(c, /\bgit\b.*\bpush\b/) &&
 			has(
 				c,
-				/(\s--force(-with-lease|-if-includes)?\b|\s-[a-zA-Z]*f[a-zA-Z]*\b|\s\+\S|\s--(mirror|prune|all|delete)\b|\s:\S)/,
+				/(\s--force(-with-lease|-if-includes)?\b|\s-[a-zA-Z]*f[a-zA-Z]*\b|\s\+\S|\s--(mirror|prune|all|delete)\b|\s-[a-zA-Z]*d[a-zA-Z]*\b|\s:\S)/,
 			),
 	},
 	{

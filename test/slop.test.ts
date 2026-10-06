@@ -6,6 +6,7 @@ import {
 	MODEL_PATH,
 	parseAddedLines,
 	prBodyFindings,
+	templateExpressions,
 	untestedChangeFindings,
 } from "../scripts/lib/slop";
 
@@ -191,8 +192,16 @@ describe("source needs a test that imports it and asserts", () => {
 			{ status: "M" as const, path: "agent/lib/provider.ts" },
 			{ status: "M" as const, path: "test/provider.test.ts" },
 		];
-		const text = "\texpect(`${resolveMode(env).kind}`).toBe(want);";
-		expect(untestedChangeFindings(changes, read, [assertion("test/provider.test.ts", text)])).toEqual([]);
+		for (const text of [
+			"\texpect(`${resolveMode(env).kind}`).toBe(want);",
+			'\texpect(`${cond ? { kind: "x" } : resolveMode(env).kind}`).toBe(want);',
+		]) {
+			expect({ text, f: untestedChangeFindings(changes, read, [assertion("test/provider.test.ts", text)]) }).toEqual({
+				text,
+				f: [],
+			});
+		}
+		expect(templateExpressions("`a ${b} c ${ {d: 1}.d } e`")).toEqual(["b", " {d: 1}.d "]);
 	});
 
 	test("an unrelated or literal assertion in an importing test does not count", () => {

@@ -31,6 +31,8 @@ describe("agent gate refuses", () => {
 			expect(ids(`git push origin ${flag}`)).toEqual(["force-push"]);
 		}
 		expect(ids("git push origin :feat/x")).toEqual(["force-push"]);
+		expect(ids("git push origin -d feat/x")).toEqual(["force-push"]);
+		expect(ids("git push -ud origin feat/x")).toEqual(["force-push"]);
 	});
 
 	test("hook bypass and hook-path changes", () => {
@@ -46,6 +48,7 @@ describe("agent gate refuses", () => {
 		expect(ids('git config core.hooksPath ".githooks "')).toEqual(["hooks-path"]);
 		expect(ids("git config --local core.hooksPath .githooks")).toEqual([]);
 		expect(ids("git config --get core.hooksPath")).toEqual([]);
+		expect(ids('git config core.hooksPath "--local" ".githooks"')).toEqual(["hooks-path"]);
 	});
 
 	test("visibility and deletion", () => {
