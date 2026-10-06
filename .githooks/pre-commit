@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Installed by `bun run hooks:install` (core.hooksPath=.githooks). Setting a
+# repo hooksPath shadows any global hooks dir, so the secret scan runs here too.
+set -euo pipefail
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+else
+  echo "pre-commit: gitleaks not installed; CI will scan (brew install gitleaks)" >&2
+fi
+bun run --silent check

@@ -56,6 +56,19 @@ Run the validation the task requests. When it does not establish the behavior yo
 
 ## Cell rules (on top of eve's guide above)
 
+### Definition of done for an agent
+
+1. `bun run verify` exits 0. Paste its tail into the PR's `## Verification` section; CI refuses a PR without it.
+2. If you touched the model path (provider, sidecar, evals, agent config), `bun run eval` passes, and you paste that too.
+3. A new boundary gets a test **and** a mutant in `scripts/lib/mutants.ts` that the test kills.
+4. Never lower the coverage floor, delete a test, shrink the mutant catalogue, float a dependency version or
+   bypass a hook. The slop gate refuses each of these; waivers are for humans to grant in the PR body.
+
+A Claude Code Stop hook (`.claude/settings.json` → `scripts/agent-stop-gate.sh`) runs `bun run check` when you
+have changed code and sends you back to work while it is red.
+
+### Boundaries
+
 - The root agent never gets a shell, file, fetch, search or self-copy tool. Code work is a holon unit, behind the
   workspace's PreToolUse gate. Adding a tool means adding it to `ALLOWED` in `test/surface.test.ts` with a reason.
 - `ANTHROPIC_*` is read in `agent/lib/provider.ts` only (and `agent/lib/holon.ts` from S3). `scripts/grep-gate.sh`
@@ -63,5 +76,5 @@ Run the validation the task requests. When it does not establish the behavior yo
 - Every `holon factory` start passes `--task-timeout`, `--max-requeues` and `--max-pause` explicitly
   (`budgetArgv`) and runs `checkLiveGrant` first.
 - Live evals are tagged `live` and never run in CI.
-- Bun + Biome for the cell's code; Node 24 is eve's runtime. eve is pinned exactly; a bump re-runs `bun run check`
-  and `bun run eval`.
+- Bun + Biome for the cell's code; Node 24 is eve's runtime. Every dependency is pinned exactly; an eve bump
+  re-runs `bun run verify` and `bun run eval`.

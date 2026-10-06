@@ -42,3 +42,16 @@ describe("provider modes", () => {
 		expect(() => resolveMode({ ANTHROPIC_API_KEY: SIDECAR_KEY })).toThrow(/api mode needs a real API key/);
 	});
 });
+
+describe("cellModel", () => {
+	test("builds an Anthropic model in either mode", async () => {
+		const { cellModel } = await import("../agent/lib/provider");
+		const sidecar = cellModel("claude-opus-5", {
+			ANTHROPIC_BASE_URL: "http://127.0.0.1:1",
+			ANTHROPIC_API_KEY: SIDECAR_KEY,
+		});
+		expect(sidecar.modelId).toBe("claude-opus-5");
+		expect(cellModel("claude-opus-5", { ANTHROPIC_API_KEY: "sk-ant-api03-x" }).modelId).toBe("claude-opus-5");
+		expect(() => cellModel("claude-opus-5", {})).toThrow();
+	});
+});

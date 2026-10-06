@@ -1,0 +1,15 @@
+name: Slice
+description: A build slice from the factory-cell spec (S2–S6) or a change of the same size.
+labels: [slice]
+body:
+  - type: input
+    id: slice
+    attributes: { label: Slice, placeholder: "S2a — intake, claim and run record" }
+    validations: { required: true }
+  - type: textarea
+    id: proof
+    attributes: { label: Proof, description: The live run that will show it works, and the artifact it leaves. }
+    validations: { required: true }
+  - type: textarea
+    id: boundary
+    attributes: { label: Boundary touched, description: Provider, tool surface, grant, claim, approval, gate. }

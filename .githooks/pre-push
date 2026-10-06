@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# The whole definition of done, before anything leaves the machine.
+set -euo pipefail
+bun run --silent verify

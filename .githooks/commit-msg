@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Conventional Commits: type(scope)!: subject — keeps the CHANGELOG writable.
+set -euo pipefail
+first=$(head -n1 "$1")
+if ! printf '%s' "$first" | grep -Eq '^(feat|fix|docs|chore|refactor|test|ci|build|perf|revert)(\([a-z0-9._/-]+\))?!?: .{3,}'; then
+  echo "commit-msg: '$first' is not a Conventional Commit (feat|fix|docs|chore|refactor|test|ci|build|perf|revert)(scope): subject" >&2
+  exit 1
+fi

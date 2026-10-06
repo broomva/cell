@@ -21,12 +21,15 @@ Never deploy the sidecar path, never put it on a shared host, never make this re
 ## Commands
 
 ```bash
-bun install
+bun install && bun run hooks:install
 bun run doctor [target-repo]   # machine checks: holon, verify-auth, sidecar smoke, PreToolUse gate, git/gh, Node 24, grant
-bun run check                  # tsc · biome · bun test (incl. the surface test) · grep gate — what CI runs
-bun run eval                   # live: holon sidecar -- eve eval --tag live (Opus, on the subscription)
+bun run verify                 # the definition of done: check · audit · build · mutate · slop (CI runs the same)
+bun run eval                   # live: holon sidecar -- eve eval --tag live (Opus, on the subscription; never in CI)
 bun run dev                    # holon sidecar -- eve dev
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for what each gate refuses, [SECURITY.md](SECURITY.md) for the boundaries
+and how to report a problem, and [AGENTS.md](AGENTS.md) for the rules agents work under.
 
 ## The boundaries S1 pins
 
