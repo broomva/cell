@@ -102,8 +102,10 @@ describe("importedNames", () => {
 			'import type { Budget } from "../agent/lib/grant";',
 			'const { f, g: h } = await import("../agent/lib/provider");',
 		].join("\n");
-		expect(importedNames(src, "agent/lib/provider").sort()).toEqual(["T", "a", "c", "def", "e", "f", "h", "ns"].sort());
-		expect(importedNames(src, "agent/lib/grant")).toEqual(["z", "Budget"]);
+		expect(importedNames(src, "agent/lib/provider").sort()).toEqual(["a", "c", "def", "e", "f", "h", "ns"].sort());
+		// a type-only import runs nothing from the module
+		expect(importedNames(src, "agent/lib/grant")).toEqual(["z"]);
+		expect(importedNames('import { type T, u } from "../agent/lib/grant";', "agent/lib/grant")).toEqual(["u"]);
 		expect(importedNames(src, "agent/lib/missing")).toEqual([]);
 	});
 });
@@ -182,6 +184,15 @@ describe("source needs a test that imports it and asserts", () => {
 				n: 1,
 			});
 		}
+	});
+
+	test("a name used inside a template expression is a use", () => {
+		const changes = [
+			{ status: "M" as const, path: "agent/lib/provider.ts" },
+			{ status: "M" as const, path: "test/provider.test.ts" },
+		];
+		const text = "\texpect(`${resolveMode(env).kind}`).toBe(want);";
+		expect(untestedChangeFindings(changes, read, [assertion("test/provider.test.ts", text)])).toEqual([]);
 	});
 
 	test("an unrelated or literal assertion in an importing test does not count", () => {

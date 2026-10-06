@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { commands, commitSkipsHooks, dequote, refusals } from "../scripts/lib/agent-gate";
+import { commands, commitSkipsHooks, dequote, hooksPathChange, refusals } from "../scripts/lib/agent-gate";
 
 const ids = (line: string) => refusals(line).map((r) => r.rule);
 
@@ -27,6 +27,10 @@ describe("agent gate refuses", () => {
 		expect(ids("git push origin main")).toEqual(["push-main"]);
 		expect(ids("git push origin HEAD:main")).toEqual(["push-main"]);
 		expect(ids("git push -u origin feat/main-menu")).toEqual([]);
+		for (const flag of ["--mirror", "--prune", "--all", "--delete feat/x"]) {
+			expect(ids(`git push origin ${flag}`)).toEqual(["force-push"]);
+		}
+		expect(ids("git push origin :feat/x")).toEqual(["force-push"]);
 	});
 
 	test("hook bypass and hook-path changes", () => {
@@ -35,7 +39,13 @@ describe("agent gate refuses", () => {
 		expect(ids("git config core.hooksPath /dev/null")).toEqual(["hooks-path"]);
 		expect(ids("git config --unset core.hooksPath")).toEqual(["hooks-path"]);
 		expect(ids("git config core.hooksPath .githooks")).toEqual([]);
+		expect(hooksPathChange("echo nothing here")).toBe(false);
 		expect(ids("git config core.hooksPath")).toEqual([]);
+		expect(ids('git config core.hooksPath ""')).toEqual(["hooks-path"]);
+		expect(ids("git config core.hooksPath ''")).toEqual(["hooks-path"]);
+		expect(ids('git config core.hooksPath ".githooks "')).toEqual(["hooks-path"]);
+		expect(ids("git config --local core.hooksPath .githooks")).toEqual([]);
+		expect(ids("git config --get core.hooksPath")).toEqual([]);
 	});
 
 	test("visibility and deletion", () => {
@@ -100,6 +110,8 @@ describe("agent gate refuses", () => {
 		expect(ids("grep -n GH_TOKEN .github/workflows/gate-guard.yml")).toEqual([]);
 		expect(ids("git commit -an -m x")).toEqual(["skip-hooks"]);
 		expect(ids("git commit README.md -n -m x")).toEqual(["skip-hooks"]);
+		expect(ids("/usr/bin/git commit -n -m x")).toEqual(["skip-hooks"]);
+		expect(ids("./node_modules/.bin/git commit -n -m x")).toEqual(["skip-hooks"]);
 		expect(ids('git commit -m "x" -n')).toEqual(["skip-hooks"]);
 		expect(ids('git commit -m "a -n b" README.md')).toEqual([]);
 		expect(ids("git commit -m '-nothing to see'")).toEqual([]);

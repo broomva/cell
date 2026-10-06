@@ -33,6 +33,23 @@ export function words(raw: string): string[] {
 }
 
 /**
+ * core.hooksPath may only be read, or set to exactly `.githooks`. Judged on
+ * raw words, so an empty or padded quoted value is not mistaken for the read
+ * form or for `.githooks`.
+ */
+export function hooksPathChange(raw: string): boolean {
+	if (!/core\.hookspath/i.test(raw)) return false;
+	const w = words(raw).filter((x) => x !== "--local");
+	const isGit = (x: string | undefined) => x === "git" || !!x?.endsWith("/git");
+	const read =
+		(w.length === 3 && isGit(w[0]) && w[1] === "config" && w[2] === "core.hooksPath") ||
+		(w.length === 4 && isGit(w[0]) && w[1] === "config" && w[2] === "--get" && w[3] === "core.hooksPath");
+	const setToGithooks =
+		w.length === 4 && isGit(w[0]) && w[1] === "config" && w[2] === "core.hooksPath" && w[3] === ".githooks";
+	return !read && !setToGithooks;
+}
+
+/**
  * `git commit -n` skips the hooks. git reads options anywhere before `--`, so
  * every word after `commit` is checked, except the value of -m/-F/--message/
  * --file: `-n` inside a message ("drop the -only flag") is text, not a flag.
@@ -41,7 +58,8 @@ export function words(raw: string): string[] {
 export function commitSkipsHooks(raw: string): boolean {
 	const w = words(raw);
 	const at = w.indexOf("commit");
-	if (at < 0 || !w.slice(0, at).includes("git")) return false;
+	// git by any path: git, /usr/bin/git, ./node_modules/.bin/git.
+	if (at < 0 || !w.slice(0, at).some((x) => x === "git" || x.endsWith("/git"))) return false;
 	for (let i = at + 1; i < w.length; i++) {
 		const t = w[i] ?? "";
 		if (t === "--") return false;
@@ -81,9 +99,13 @@ export const RULES: Rule[] = [
 	},
 	{
 		rule: "force-push",
-		why: "history on the remote is never rewritten by an agent",
+		why: "history and branches on the remote are never rewritten or deleted by an agent",
 		test: (c) =>
-			has(c, /\bgit\b.*\bpush\b/) && has(c, /(\s--force(-with-lease|-if-includes)?\b|\s-[a-zA-Z]*f[a-zA-Z]*\b|\s\+\S)/),
+			has(c, /\bgit\b.*\bpush\b/) &&
+			has(
+				c,
+				/(\s--force(-with-lease|-if-includes)?\b|\s-[a-zA-Z]*f[a-zA-Z]*\b|\s\+\S|\s--(mirror|prune|all|delete)\b|\s:\S)/,
+			),
 	},
 	{
 		rule: "push-main",
@@ -94,14 +116,6 @@ export const RULES: Rule[] = [
 		rule: "skip-hooks",
 		why: "the git hooks are the local gate; never bypass them",
 		test: (c) => has(c, /\bgit\b/) && has(c, NO_VERIFY),
-	},
-	{
-		rule: "hooks-path",
-		why: "core.hooksPath stays .githooks",
-		test: (c) =>
-			has(c, /core\.hookspath/i) &&
-			!has(c, /^\s*git\s+config\s+(--local\s+)?core\.hooksPath\s+\.githooks\s*$/i) &&
-			!has(c, /^\s*git\s+config\s+(--get\s+)?core\.hooksPath\s*$/i),
 	},
 	{
 		rule: "obfuscated",
@@ -154,5 +168,6 @@ export function refusals(line: string): Refusal[] {
 	if (!out.some((r) => r.rule === "skip-hooks") && raw.some(commitSkipsHooks)) {
 		out.push({ rule: "skip-hooks", why: "the git hooks are the local gate; never bypass them" });
 	}
+	if (raw.some(hooksPathChange)) out.push({ rule: "hooks-path", why: "core.hooksPath stays .githooks" });
 	return out;
 }

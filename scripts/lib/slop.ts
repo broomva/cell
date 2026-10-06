@@ -35,7 +35,11 @@ const SELF = /^scripts\/lib\/slop\.ts$/;
 const LITERAL_ASSERTION = /\bexpect\(\s*(true|false|null|undefined|-?\d+(\.\d+)?|"[^"]*"|'[^']*'|`[^`$]*`)\s*\)/;
 /** A line with its string literals and trailing comment removed, so a name inside a string is not a use. */
 const code = (line: string) =>
-	line.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g, '""').replace(/\/\/.*$/, "");
+	line
+		// A template literal keeps its ${…} expressions: they are code.
+		.replace(/`(?:[^`\\]|\\.)*`/g, (t) => [...t.matchAll(/\$\{([^}]*)\}/g)].map((x) => x[1]).join(" ") || '""')
+		.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
+		.replace(/\/\/.*$/, "");
 
 interface LineRule {
 	id: string;
@@ -189,11 +193,13 @@ export function importedNames(testSource: string, modulePath: string): string[] 
 	const spec = `["'](?:\\.{1,2}/)+${escapeRe(modulePath)}(?:\\.ts)?["']`;
 	const names: string[] = [];
 	for (const m of testSource.matchAll(new RegExp(`import\\s+([^;]*?)\\s+from\\s+${spec}`, "g"))) {
-		const clause = (m[1] ?? "").replace(/^type\s+/, "");
+		// A type-only import runs nothing from the module, so it is not coverage.
+		if (/^type\s/.test(m[1] ?? "")) continue;
+		const clause = m[1] ?? "";
 		const braces = clause.match(/\{([^}]*)\}/)?.[1] ?? "";
 		for (const part of braces.split(",")) {
+			if (/^\s*type\s/.test(part)) continue;
 			const name = part
-				.replace(/^\s*type\s+/, "")
 				.split(/\s+as\s+/)
 				.at(-1)
 				?.trim();

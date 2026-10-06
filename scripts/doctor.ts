@@ -64,7 +64,10 @@ pass("node", n.out.trim());
 
 // 7. this checkout's git hooks are the repository's
 const hp = run(["git", "-C", resolve(import.meta.dir, ".."), "config", "core.hooksPath"]);
-if (hp.out.trim() !== ".githooks") fail("hooks", `core.hooksPath is "${hp.out.trim()}"; run \`bun run hooks:install\``);
+// Exact: a padded value (".githooks ") points git at a directory that does not exist.
+const hooksPath = hp.out.replace(/\n$/, "");
+if (hooksPath !== ".githooks")
+	fail("hooks", `core.hooksPath is ${JSON.stringify(hooksPath)}; run \`bun run hooks:install\``);
 pass("hooks", "core.hooksPath = .githooks");
 
 // 8. main's ruleset requires both gates, bound to the Actions app
