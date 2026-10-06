@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	dependencyRangeFindings,
 	lineFindings,
+	MODEL_PATH,
 	parseAddedLines,
 	prBodyFindings,
 	untestedChangeFindings,
@@ -57,6 +58,10 @@ describe("line rules", () => {
 			expect(rules("test/a.test.ts", j("test.", m, '("x")'))).toContain("conditional-test");
 		}
 		expect(rules("evals/a.eval.ts", j("test.", "todo", '("x")'))).toContain("conditional-test");
+		expect(rules("test/a.test.ts", j("test.", "todoIf", '(true)("x")'))).toContain("conditional-test");
+		expect(rules("test/a.test.ts", j("test.", "skip", '.each([1])("x")'))).toContain("conditional-test");
+		expect(rules("test/a.test.ts", j("test.", "each", "([])", '("x")'))).toContain("conditional-test");
+		expect(rules("test/a.test.ts", j("test.", "each", "([1, 2])", '("x")'))).toEqual([]);
 		expect(rules("agent/a.ts", j("list.", "if", "(")).length).toBe(0);
 	});
 
@@ -109,14 +114,17 @@ describe("dependency pins", () => {
 	});
 });
 
-describe("source needs a test that names it", () => {
+describe("source needs a test that imports it and asserts", () => {
 	const files: Record<string, string> = {
 		"test/provider.test.ts": 'import { resolveMode } from "../agent/lib/provider";',
-		"test/other.test.ts": "// unrelated whitespace",
+		"test/other.test.ts": "// mentions provider and grant, imports neither",
+		"test/surface.test.ts": "// eve info",
 	};
 	const read = (p: string) => files[p] ?? "";
+	const assertion = (path: string) => ({ path, line: 1, text: "\texpect(x).toBe(1);" });
+	const whitespace = (path: string) => ({ path, line: 1, text: "" });
 
-	test("a changed test that names the module", () => {
+	test("a changed test that imports the module and adds an assertion", () => {
 		expect(
 			untestedChangeFindings(
 				[
@@ -124,19 +132,30 @@ describe("source needs a test that names it", () => {
 					{ status: "M", path: "test/provider.test.ts" },
 				],
 				read,
+				[assertion("test/provider.test.ts")],
 			),
 		).toEqual([]);
 	});
 
-	test("an unrelated test edit does not count", () => {
-		const f = untestedChangeFindings(
+	test("a name mention, or an importing test touched without an assertion, does not count", () => {
+		const mention = untestedChangeFindings(
 			[
 				{ status: "M", path: "agent/lib/provider.ts" },
 				{ status: "M", path: "test/other.test.ts" },
 			],
 			read,
+			[assertion("test/other.test.ts")],
 		);
-		expect(f.map((x) => [x.rule, x.where])).toEqual([["source-without-test", "agent/lib/provider.ts"]]);
+		expect(mention.map((x) => [x.rule, x.where])).toEqual([["source-without-test", "agent/lib/provider.ts"]]);
+		const touched = untestedChangeFindings(
+			[
+				{ status: "M", path: "agent/lib/provider.ts" },
+				{ status: "M", path: "test/provider.test.ts" },
+			],
+			read,
+			[whitespace("test/provider.test.ts")],
+		);
+		expect(touched).toHaveLength(1);
 	});
 
 	test("each source file is judged on its own", () => {
@@ -147,8 +166,35 @@ describe("source needs a test that names it", () => {
 				{ status: "M", path: "test/provider.test.ts" },
 			],
 			read,
+			[assertion("test/provider.test.ts")],
 		);
 		expect(f.map((x) => x.where)).toEqual(["scripts/lib/guard.ts"]);
+	});
+
+	test("agent files no test imports are covered by the surface test or an eval", () => {
+		const tool = { status: "M" as const, path: "agent/tools/bash.ts" };
+		expect(
+			untestedChangeFindings([tool, { status: "M", path: "test/surface.test.ts" }], read, [
+				assertion("test/surface.test.ts"),
+			]),
+		).toEqual([]);
+		expect(
+			untestedChangeFindings([tool, { status: "A", path: "evals/x.eval.ts" }], read, [
+				{ path: "evals/x.eval.ts", line: 1, text: "t.usedNoTools();" },
+			]),
+		).toEqual([]);
+		expect(untestedChangeFindings([tool], read, [])).toHaveLength(1);
+		// scripts/lib has no such fallback
+		expect(
+			untestedChangeFindings(
+				[
+					{ status: "M", path: "scripts/lib/guard.ts" },
+					{ status: "M", path: "test/surface.test.ts" },
+				],
+				read,
+				[assertion("test/surface.test.ts")],
+			),
+		).toHaveLength(1);
 	});
 
 	test("docs, deletions and top-level CLIs are out of scope", () => {
@@ -157,25 +203,51 @@ describe("source needs a test that names it", () => {
 			{ status: "D" as const, path: "agent/lib/x.ts" },
 			{ status: "M" as const, path: "scripts/doctor.ts" },
 		];
-		expect(untestedChangeFindings(changes, read)).toEqual([]);
+		expect(untestedChangeFindings(changes, read, [])).toEqual([]);
 	});
 });
 
 describe("PR body evidence", () => {
-	const verdict = "```\n$ bun run verify\nmutate: 22/22 killed\nslop: 0 finding(s)\n```";
+	const verdict = (n: number, of = n) => `\`\`\`\n$ bun run verify\nmutate: ${n}/${of} killed\n\`\`\``;
+	const needs = { mutants: 22, modelPath: false };
+	const rulesOf = (body: string, n = needs) => prBodyFindings(body, n).map((f) => f.rule);
 
-	test("a visible Verification section quoting a full kill", () => {
-		expect(prBodyFindings(`## Summary\nx\n\n## Verification\n${verdict}\n`)).toEqual([]);
-		expect(prBodyFindings(`## Verification\n${verdict}\n\n## Notes\nx`)).toEqual([]);
+	test("a visible Verification section quoting every mutant killed", () => {
+		expect(rulesOf(`## Summary\nx\n\n## Verification\n${verdict(22)}\n`)).toEqual([]);
+		expect(rulesOf(`## Verification\n${verdict(22)}\n\n## Notes\nx`)).toEqual([]);
 	});
 
-	test("missing, stub, partial or hidden evidence fails", () => {
-		expect(prBodyFindings("## Summary\nx")).toHaveLength(1);
-		expect(prBodyFindings("## Verification\nthis is fake evidence long enough to pass a length check")).toHaveLength(1);
-		expect(prBodyFindings("## Verification\nmutate: 21/22 killed\n")).toHaveLength(1);
-		expect(prBodyFindings(`## Verification\nok\n\n## Notes\n${verdict}`)).toHaveLength(1);
-		expect(prBodyFindings(`<!--\n## Verification\n${verdict}\n-->`)).toHaveLength(1);
-		expect(prBodyFindings(`## Verification\n<!-- ${verdict} -->\n`)).toHaveLength(1);
-		expect(prBodyFindings(`## Verification\n<!-- unterminated ${verdict}`)).toHaveLength(1);
+	test("missing, stub, partial, wrong-size or hidden evidence fails", () => {
+		expect(rulesOf("## Summary\nx")).toEqual(["pr-verification"]);
+		expect(rulesOf("## Verification\nthis is fake evidence long enough to pass a length check")).toEqual([
+			"pr-verification",
+		]);
+		expect(rulesOf(`## Verification\n${verdict(21, 22)}`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`## Verification\n${verdict(0)}`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`## Verification\n${verdict(14)}`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`## Verification\nok\n\n## Notes\n${verdict(22)}`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`<!--\n## Verification\n${verdict(22)}\n-->`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`## Verification\n<!-- ${verdict(22)} -->\n`)).toEqual(["pr-verification"]);
+		expect(rulesOf(`## Verification\n<!-- unterminated ${verdict(22)}`)).toEqual(["pr-verification"]);
+	});
+
+	test("a model-path change needs a live eval result or a stated reason", () => {
+		const model = { mutants: 22, modelPath: true };
+		const base = `## Verification\n${verdict(22)}\n`;
+		expect(rulesOf(base, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(`${base}Results: 2 passed (2 total)\n`, model)).toEqual([]);
+		expect(rulesOf(`${base}Results: 1 passed (2 total)\n`, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(`${base}Live eval not run: the grant is expired and D13 forbids refreshing it\n`, model)).toEqual(
+			[],
+		);
+		expect(rulesOf(`${base}Live eval not run: no\n`, model)).toEqual(["pr-live-evidence"]);
+		expect(rulesOf(`${base}<!-- Results: 2 passed (2 total) -->\n`, model)).toEqual(["pr-live-evidence"]);
+	});
+
+	test("which files are on the model path", () => {
+		for (const p of ["agent/lib/provider.ts", "agent/tools/bash.ts", "evals/x.eval.ts", "package.json"]) {
+			expect(MODEL_PATH.test(p)).toBe(true);
+		}
+		for (const p of ["scripts/lib/slop.ts", "test/x.test.ts", "README.md"]) expect(MODEL_PATH.test(p)).toBe(false);
 	});
 });

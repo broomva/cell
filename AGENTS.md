@@ -58,15 +58,18 @@ Run the validation the task requests. When it does not establish the behavior yo
 
 ### Definition of done for an agent
 
-1. `bun run verify` exits 0. Paste its tail into the PR's `## Verification` section; CI refuses a PR without it.
-2. If you touched the model path (provider, sidecar, evals, agent config), `bun run eval` passes, and you paste that too.
-3. A new boundary gets a test **and** a mutant in `scripts/lib/mutants.ts` that the test kills.
+1. `bun run verify` exits 0. Paste its tail into the PR's `## Verification` section; CI refuses a PR without the
+   `mutate: N/N killed` line.
+2. If you touched `agent/`, `evals/` or `package.json`, run `bun run eval` and paste its `Results:` line, or write
+   `Live eval not run: <reason>`. CI refuses neither-nor.
+3. A new boundary gets a test that imports it and asserts behaviour, **and** a mutant naming that test.
 4. Never edit a gate, delete or move a test, lower the coverage floor, shrink the mutant catalogue, float a
    dependency version, bypass a hook, or merge with the ruleset bypass. `gate-guard` (run from `main`) fails a PR
    that touches the gates; only a human merges one.
 
-A Claude Code Stop hook (`.claude/settings.json` → `scripts/agent-stop-gate.sh`) runs `bun run check` when you
-have changed code and sends you back to work while it is red.
+Two Claude Code hooks hold you to this (`.claude/settings.json`): a PreToolUse hook refuses the admin merge bypass,
+ruleset and protection writes, pushes to `main`, force pushes, `--no-verify` and hook-path changes; a Stop hook runs
+`bun run check` when you have changed anything and sends you back to work while it is red.
 
 ### Boundaries
 

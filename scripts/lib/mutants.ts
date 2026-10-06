@@ -1,7 +1,7 @@
 // The mutation gate's catalogue. Each mutant is one deliberate bug in a line
 // that carries a boundary of the design. `bun run mutate` applies each in a
-// scratch copy and runs only its `killedBy` test file, so a kill is
-// attributable: that file, and nothing else, must fail. A mutant whose `find`
+// scratch copy and runs only the one test it names (`killedBy` file,
+// `killedByTest` name), so a kill is attributable to that test's assertions. A mutant whose `find`
 // no longer matches exactly once fails the gate too, so a refactor cannot
 // silently retire a mutant. This file is held by the gate guard: shrinking
 // the catalogue needs a human.
@@ -13,6 +13,8 @@ export interface Mutant {
 	replace: string;
 	/** The test file that must fail with this mutant applied. */
 	killedBy: string;
+	/** The name (or a literal part of it) of the one test in that file that must fail; run alone with -t. */
+	killedByTest: string;
 	/** What would break, in one line. */
 	why: string;
 }
@@ -24,6 +26,7 @@ export const MUTANTS: Mutant[] = [
 		find: "!LOOPBACK_HOSTS.has(url.hostname)",
 		replace: "false",
 		killedBy: "test/provider.test.ts",
+		killedByTest: "refuses: a non-loopback or non-http base URL",
 		why: "the sidecar base URL could point off this machine",
 	},
 	{
@@ -32,6 +35,7 @@ export const MUTANTS: Mutant[] = [
 		find: 'if (apiKey.startsWith("sk-ant-")) {',
 		replace: "if (false) {",
 		killedBy: "test/provider.test.ts",
+		killedByTest: "refuses: modes mixed",
 		why: "a real credential could ride alongside the sidecar",
 	},
 	{
@@ -40,6 +44,7 @@ export const MUTANTS: Mutant[] = [
 		find: 'if (!apiKey.startsWith("sk-ant-api")) {',
 		replace: "if (false) {",
 		killedBy: "test/provider.test.ts",
+		killedByTest: "refuses: modes mixed",
 		why: "api mode would accept a sidecar key and call out",
 	},
 	{
@@ -48,6 +53,7 @@ export const MUTANTS: Mutant[] = [
 		find: "createAnthropic({ apiKey: mode.apiKey, baseURL: ANTHROPIC_API_BASE })",
 		replace: "createAnthropic({ apiKey: mode.apiKey })",
 		killedBy: "test/provider.test.ts",
+		killedByTest: "the real key goes to api.anthropic.com",
 		why: "a stray ANTHROPIC_BASE_URL would receive the real API key",
 	},
 	{
@@ -56,6 +62,7 @@ export const MUTANTS: Mutant[] = [
 		find: "b.maxPause * b.maxRequeues",
 		replace: "b.maxPause",
 		killedBy: "test/grant.test.ts",
+		killedByTest: "ceiling = timeout",
 		why: "the run ceiling would undercount pauses",
 	},
 	{
@@ -64,6 +71,7 @@ export const MUTANTS: Mutant[] = [
 		find: "const needed = ceilingSeconds + MARGIN_SECONDS;",
 		replace: "const needed = ceilingSeconds;",
 		killedBy: "test/grant.test.ts",
+		killedByTest: "refuses when the grant would expire inside the run",
 		why: "holon could refresh the grant inside its own five-minute window",
 	},
 	{
@@ -72,6 +80,7 @@ export const MUTANTS: Mutant[] = [
 		find: "if (remainingSeconds < needed) {",
 		replace: "if (remainingSeconds <= needed) {",
 		killedBy: "test/grant.test.ts",
+		killedByTest: "refuses when the grant would expire inside the run",
 		why: "the boundary of the refusal moves",
 	},
 	{
@@ -81,6 +90,7 @@ export const MUTANTS: Mutant[] = [
 		replace:
 			"if (!expiry) {\n\t\treturn { ok: true, remainingSeconds: 1e9, ceilingSeconds };\n\t\treturn {\n\t\t\tok: false,",
 		killedBy: "test/grant.test.ts",
+		killedByTest: "fails closed on an unreadable status",
 		why: "an unreadable status would start a run",
 	},
 	{
@@ -89,7 +99,17 @@ export const MUTANTS: Mutant[] = [
 		find: "v < 0)",
 		replace: "v < -1)",
 		killedBy: "test/grant.test.ts",
+		killedByTest: "budget flags are explicit",
 		why: "a negative budget flag would reach holon",
+	},
+	{
+		id: "sandbox-default",
+		file: "agent/sandbox/sandbox.ts",
+		find: 'import { JustBashSandbox } from "eve/sandbox/just-bash";',
+		replace: 'import { DefaultSandbox as JustBashSandbox } from "eve/sandbox";',
+		killedBy: "test/sandbox.test.ts",
+		killedByTest: "the sandbox is just-bash",
+		why: "the root would get whichever sandbox the host offers",
 	},
 	{
 		id: "surface-web-fetch-enabled",
@@ -97,6 +117,7 @@ export const MUTANTS: Mutant[] = [
 		find: "export default disableTool();",
 		replace: 'export { default } from "eve/tools/web_fetch";',
 		killedBy: "test/surface.test.ts",
+		killedByTest: "eve reports exactly the allow-list",
 		why: "the root would get egress",
 	},
 	{
@@ -105,15 +126,8 @@ export const MUTANTS: Mutant[] = [
 		find: "export default disableTool();",
 		replace: 'export { default } from "eve/tools/bash";',
 		killedBy: "test/surface.test.ts",
+		killedByTest: "eve reports exactly the allow-list",
 		why: "the root would get a shell",
-	},
-	{
-		id: "sandbox-default",
-		file: "agent/sandbox/sandbox.ts",
-		find: 'import { JustBashSandbox } from "eve/sandbox/just-bash";',
-		replace: 'import { DefaultSandbox as JustBashSandbox } from "eve/sandbox";',
-		killedBy: "test/sandbox.test.ts",
-		why: "the root would get whichever sandbox the host offers",
 	},
 	{
 		id: "surfaces-trivial-hook",
@@ -121,6 +135,7 @@ export const MUTANTS: Mutant[] = [
 		find: "!TRIVIAL.test(h.command)",
 		replace: "true",
 		killedBy: "test/surfaces.test.ts",
+		killedByTest: "a hook that does nothing, is no gate",
 		why: "a hook that does nothing would count as a gate",
 	},
 	{
@@ -130,15 +145,17 @@ export const MUTANTS: Mutant[] = [
 		find: 'matchesBash = new RegExp(`^(?:${m})$`).test("Bash");',
 		replace: "matchesBash = true;",
 		killedBy: "test/surfaces.test.ts",
+		killedByTest: "a matcher that misses Bash",
 		why: "a hook on Edit alone would count as a Bash gate",
 	},
 	{
 		id: "slop-conditional-test",
 		file: "scripts/lib/slop.ts",
-		find: "bad: /\\.(todo|skipIf|if|failing)\\(/,",
-		replace: "bad: /\\.(never)\\(/,",
+		find: "bad: /\\.(todo|todoIf|skipIf|if|failing)\\b|\\.skip\\.|\\.each\\(\\s*\\[\\s*\\]/,",
+		replace: "bad: /\\.(todo|skipIf|if|failing)\\(/,",
 		killedBy: "test/slop.test.ts",
-		why: "a test that switches itself off would pass review",
+		killedByTest: "tests that switch themselves off",
+		why: "todoIf, skip.each and each([]) would switch tests off unseen",
 	},
 	{
 		id: "slop-dependency-range",
@@ -146,15 +163,26 @@ export const MUTANTS: Mutant[] = [
 		find: 'if (typeof version !== "string" || !EXACT.test(version)) {',
 		replace: 'if (typeof version !== "string" || version.startsWith("^")) {',
 		killedBy: "test/slop.test.ts",
+		killedByTest: "anything else fails, in every section",
 		why: "a floating dependency version other than ^ would land",
 	},
 	{
-		id: "slop-untested-any-test",
+		id: "slop-untested-name-mention",
 		file: "scripts/lib/slop.ts",
-		find: "if (!tests.some((t) => named.test(t))) {",
-		replace: "if (tests.length === 0) {",
+		find: "imports.test(readFile(t.path)) && asserts(t.path)",
+		replace: 'readFile(t.path).includes(modulePath.split("/").at(-1) ?? "") && asserts(t.path)',
 		killedBy: "test/slop.test.ts",
-		why: "an unrelated test edit would excuse untested source",
+		killedByTest: "a name mention, or an importing test touched without an assertion",
+		why: "a test that only mentions the module would excuse it",
+	},
+	{
+		id: "slop-untested-no-assert",
+		file: "scripts/lib/slop.ts",
+		find: "imports.test(readFile(t.path)) && asserts(t.path)",
+		replace: "imports.test(readFile(t.path))",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "a name mention, or an importing test touched without an assertion",
+		why: "touching an importing test without asserting would excuse the change",
 	},
 	{
 		id: "slop-hunk-header",
@@ -162,15 +190,17 @@ export const MUTANTS: Mutant[] = [
 		find: "if (oldLeft > 0 || newLeft > 0) {",
 		replace: "if (false) {",
 		killedBy: "test/slop.test.ts",
+		killedByTest: "an added line that starts with ++ is content",
 		why: "an added line starting with ++ would hide the rest of the file",
 	},
 	{
-		id: "slop-verification-verdict",
+		id: "slop-verdict-size",
 		file: "scripts/lib/slop.ts",
-		find: "if (!verdict || verdict[1] !== verdict[2]) {",
-		replace: "if (false) {",
+		find: "if (!verdict || verdict[1] !== verdict[2] || Number(verdict[2]) !== needs.mutants) {",
+		replace: "if (!verdict || verdict[1] !== verdict[2]) {",
 		killedBy: "test/slop.test.ts",
-		why: "a PR could land without the mutation verdict",
+		killedByTest: "missing, stub, partial, wrong-size or hidden evidence fails",
+		why: "`mutate: 0/0 killed` would count as evidence",
 	},
 	{
 		id: "slop-hidden-verification",
@@ -178,7 +208,17 @@ export const MUTANTS: Mutant[] = [
 		find: 'const visible = body.replace(/<!--[\\s\\S]*?(-->|$)/g, "");',
 		replace: "const visible = body;",
 		killedBy: "test/slop.test.ts",
+		killedByTest: "missing, stub, partial, wrong-size or hidden evidence fails",
 		why: "evidence hidden in an HTML comment would count",
+	},
+	{
+		id: "slop-live-evidence",
+		file: "scripts/lib/slop.ts",
+		find: "if (!ran && !declined) {",
+		replace: "if (false) {",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "a model-path change needs a live eval result",
+		why: "a model-path change could land with no word on the live eval",
 	},
 	{
 		id: "guard-gate-files",
@@ -186,23 +226,98 @@ export const MUTANTS: Mutant[] = [
 		find: "if (guarded) out.push",
 		replace: "if (false) out.push",
 		killedBy: "test/guard.test.ts",
+		killedByTest: "every gate file is guarded",
 		why: "a PR could edit the gates that judge it",
 	},
 	{
-		id: "guard-test-moved-out",
+		id: "guard-test-leaves-suite",
 		file: "scripts/lib/guard.ts",
-		find: "TEST.test(f.previous_filename) && !TEST.test(f.filename)",
-		replace: "false",
+		find: "if (from >= 0 && suiteOf(f.filename) !== from) {",
+		replace: "if (from >= 0 && suiteOf(f.filename) < 0) {",
 		killedBy: "test/guard.test.ts",
-		why: "a test renamed out of the suite would vanish unseen",
+		killedByTest: "moving a test out of its suite, by any path",
+		why: "a test moved from test/ into evals/ would stop running unseen",
 	},
 	{
-		id: "guard-package-scripts",
+		id: "guard-package-keys",
 		file: "scripts/lib/guard.ts",
-		find: 'for (const key of ["scripts", "overrides"]) {',
-		replace: 'for (const key of ["overrides"]) {',
+		find: "if (DEPENDENCY_SECTIONS.includes(key)) continue;",
+		replace: 'if (key !== "scripts" && key !== "overrides") continue;',
 		killedBy: "test/guard.test.ts",
-		why: "a PR could rewrite `bun run test` to `true`",
+		killedByTest: "every other key is guarded",
+		why: "patchedDependencies or trustedDependencies would change CI unseen",
+	},
+	{
+		id: "guard-absent-is-empty",
+		file: "scripts/lib/guard.ts",
+		find: 'const b = JSON.parse(base ?? "{}") as Record<string, unknown>;',
+		replace: "if (base === null) return [];\n\tconst b = JSON.parse(base) as Record<string, unknown>;",
+		killedBy: "test/guard.test.ts",
+		killedByTest: "a missing side reads as empty",
+		why: "an unreadable package.json would read as no change",
+	},
+	{
+		id: "guard-truncated-list",
+		file: "scripts/lib/guard.ts",
+		find: "return listed === changedFiles",
+		replace: "return true",
+		killedBy: "test/guard.test.ts",
+		killedByTest: "a truncated file list fails closed",
+		why: "a PR past 3000 files would hide a gate edit",
+	},
+	{
+		id: "agent-gate-admin-merge",
+		file: "scripts/lib/agent-gate.ts",
+		find: "has(c, /--admin\\b/)",
+		replace: "false",
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "the admin bypass",
+		why: "an agent could merge a guarded PR with the bypass",
+	},
+	{
+		id: "agent-gate-protection",
+		file: "scripts/lib/agent-gate.ts",
+		find: "has(c, /(rulesets|\\/protection|\\/collaborators|actions\\/permissions)/)",
+		replace: "has(c, /(\\/collaborators)/)",
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "writes to rulesets",
+		why: "an agent could rewrite the ruleset",
+	},
+	{
+		id: "agent-gate-force-push",
+		file: "scripts/lib/agent-gate.ts",
+		find: "has(c, /(\\s--force(-with-lease)?\\b|\\s-[a-zA-Z]*f[a-zA-Z]*\\b|\\s\\+\\S)/)",
+		replace: "has(c, /\\s--force\\b/)",
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "force pushes and pushes to main",
+		why: "a short -f or +refspec force push would pass",
+	},
+	{
+		id: "agent-gate-separators",
+		file: "scripts/lib/agent-gate.ts",
+		find: ".split(/&&|\\|\\||;|\\||\\n/)",
+		replace: ".split(/\\n/)",
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "a refused command hidden behind a separator",
+		why: "a refused command after && would pass",
+	},
+	{
+		id: "agent-gate-fail-open",
+		file: "scripts/agent-pretool-gate.ts",
+		find: "refusing`);\n\tprocess.exit(2);",
+		replace: "refusing`);\n\tprocess.exit(0);",
+		killedBy: "test/agent-gate.test.ts",
+		killedByTest: "fails closed on input it cannot read",
+		why: "an unreadable tool call would be allowed",
+	},
+	{
+		id: "ruleset-unbound-check",
+		file: "scripts/lib/ruleset.ts",
+		find: "else if (c.integration_id !== ACTIONS_APP_ID)",
+		replace: "else if (false)",
+		killedBy: "test/ruleset.test.ts",
+		killedByTest: "a missing or unbound required check is a gap",
+		why: "a forgeable, unbound required check would pass the doctor",
 	},
 ];
 

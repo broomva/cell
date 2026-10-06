@@ -5,11 +5,13 @@
 // Any git failure is exit 2: a gate that cannot read the diff does not pass.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MUTANTS } from "./lib/mutants";
 import {
 	dependencyRangeFindings,
 	type FileChange,
 	type Finding,
 	lineFindings,
+	MODEL_PATH,
 	parseAddedLines,
 	prBodyFindings,
 	untestedChangeFindings,
@@ -51,15 +53,18 @@ const changes: FileChange[] = git(["diff", ...RAW, "--name-status", "-M", `${bas
 	});
 const diff = git(["diff", ...RAW, "-U0", `${base}...HEAD`]);
 
+const added = parseAddedLines(diff);
 const findings: Finding[] = [
-	...lineFindings(parseAddedLines(diff)),
+	...lineFindings(added),
 	...dependencyRangeFindings(readFileSync(join(ROOT, "package.json"), "utf8")),
-	...untestedChangeFindings(changes, (p) => readFileSync(join(ROOT, p), "utf8")),
+	...untestedChangeFindings(changes, (p) => readFileSync(join(ROOT, p), "utf8"), added),
 ];
 
 const body = process.env.PR_BODY;
-if (body !== undefined) findings.push(...prBodyFindings(body));
-else console.log("slop: PR_BODY unset; skipping the PR body check (CI sets it)");
+if (body !== undefined) {
+	const modelPath = changes.some((c) => MODEL_PATH.test(c.path));
+	findings.push(...prBodyFindings(body, { mutants: MUTANTS.length, modelPath }));
+} else console.log("slop: PR_BODY unset; skipping the PR body checks (CI sets it)");
 
 for (const f of findings) console.log(`SLOP    ${f.rule.padEnd(26)} ${f.where} — ${f.detail}`);
 console.log(`slop: ${changes.length} file(s) vs ${base.slice(0, 9)}; ${findings.length} finding(s)`);

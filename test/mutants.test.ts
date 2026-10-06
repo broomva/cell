@@ -16,10 +16,21 @@ describe("mutant catalogue", () => {
 		}
 	});
 
-	test("every killedBy file exists, and none is this catalogue test", () => {
+	test("every killedBy file exists, names its test, and is not this catalogue test", () => {
 		for (const m of MUTANTS) {
 			expect(existsSync(join(ROOT, m.killedBy))).toBe(true);
 			expect(m.killedBy).not.toBe("test/mutants.test.ts");
+			expect(readFileSync(join(ROOT, m.killedBy), "utf8")).toContain(m.killedByTest);
+		}
+	});
+
+	// A test that pins a module's source text fails for every mutant of that
+	// module without checking any behaviour. Tests that kill mutants assert
+	// what the code does, never what it says.
+	test("no killedBy file reads source text", () => {
+		const reads = /readFileSync|readFile\(|Bun\.file\(|with\s*\{\s*type:\s*["']text["']|node:fs\/promises/;
+		for (const file of new Set(MUTANTS.map((m) => m.killedBy))) {
+			expect({ file, reads: reads.test(readFileSync(join(ROOT, file), "utf8")) }).toEqual({ file, reads: false });
 		}
 	});
 
@@ -28,7 +39,7 @@ describe("mutant catalogue", () => {
 	});
 
 	test("a missing or ambiguous find string is refused", () => {
-		const m = { id: "x", file: "f", find: "needle", replace: "pin", killedBy: "t", why: "" };
+		const m = { id: "x", file: "f", find: "needle", replace: "pin", killedBy: "t", killedByTest: "n", why: "" };
 		expect(() => applyMutant("hay", m)).toThrow(/not in/);
 		expect(() => applyMutant("needle needle", m)).toThrow(/more than once/);
 		expect(applyMutant("a needle b", m)).toBe("a pin b");

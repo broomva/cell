@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // The root agent's model-facing surface, asserted on what eve itself reports.
@@ -7,7 +6,9 @@ import { join } from "node:path";
 // pinned the compiled manifest instead; 0.67.2 has no such file, and its
 // `eve info --json` drops a disabled tool and lists it again when the
 // disableTool() file is removed (measured both ways). So the info output is the
-// artifact, and an eve bump that ships a new default tool fails here.
+// artifact, and an eve bump that ships a new default tool fails here. The
+// test asserts what eve reports, never the text of the tool files, so a
+// mutation of a tool file is caught by its effect.
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -37,13 +38,6 @@ function eveInfo(): { tools: string[] } {
 }
 
 describe("root agent surface", () => {
-	test("every disabled built-in has its disableTool() file", () => {
-		for (const name of DISABLED) {
-			const src = readFileSync(join(ROOT, "agent/tools", `${name}.ts`), "utf8");
-			expect(src).toContain("export default disableTool();");
-		}
-	});
-
 	test(
 		"eve reports exactly the allow-list, none of the disabled built-ins",
 		() => {

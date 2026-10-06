@@ -4,6 +4,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { checkGrant } from "../agent/lib/grant";
+import { rulesetGaps } from "./lib/ruleset";
 import { preToolUseSurfaces } from "./lib/surfaces";
 
 const target = resolve(process.argv[2] ?? process.cwd());
@@ -67,7 +68,17 @@ const hp = run(["git", "-C", resolve(import.meta.dir, ".."), "config", "core.hoo
 if (hp.out.trim() !== ".githooks") fail("hooks", `core.hooksPath is "${hp.out.trim()}"; run \`bun run hooks:install\``);
 pass("hooks", "core.hooksPath = .githooks");
 
-// 8. D13: how long the grant has, against a one-attempt, ten-minute budget
+// 8. main's ruleset requires both gates, bound to the Actions app
+const repo = run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]).out.trim();
+const rs = run(["gh", "api", `repos/${repo}/rules/branches/main`]);
+let gaps: string[] = ["could not read the ruleset"];
+try {
+	if (rs.code === 0) gaps = rulesetGaps(JSON.parse(rs.out));
+} catch {}
+if (gaps.length > 0) fail("ruleset", gaps.join("; "));
+pass("ruleset", "main: PRs only, no force push or deletion, gate + gate-guard required");
+
+// 9. D13: how long the grant has, against a one-attempt, ten-minute budget
 const st = run(["holon", "auth", "status"]);
 const g13 = checkGrant(st.out, { taskTimeout: 600, maxRequeues: 0, maxPause: 0 });
 if (!g13.ok) fail("grant", g13.reason);

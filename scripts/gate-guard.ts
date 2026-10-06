@@ -2,7 +2,7 @@
 // Run by .github/workflows/gate-guard.yml from the default branch. Needs
 // GH_TOKEN, REPO (owner/name), PR (number), BASE_SHA and HEAD_SHA. Reads the
 // PR through the API only; never checks out or runs PR code.
-import { fileFindings, type PrFile, packageFindings } from "./lib/guard";
+import { completeness, fileFindings, type PrFile, packageFindings } from "./lib/guard";
 
 const { REPO, PR, BASE_SHA, HEAD_SHA } = process.env;
 if (!REPO || !PR || !BASE_SHA || !HEAD_SHA) {
@@ -21,6 +21,11 @@ if (listed === null) {
 	process.exit(2);
 }
 const files = (JSON.parse(listed) as PrFile[][]).flat();
+const pr = gh(["api", `repos/${REPO}/pulls/${PR}`, "--jq", ".changed_files"]);
+if (pr === null || !/^\d+$/.test(pr.trim())) {
+	console.error("gate-guard: could not read the PR's changed_files count");
+	process.exit(2);
+}
 
 const blob = (sha: string) =>
 	gh(["api", "-H", "Accept: application/vnd.github.raw", `repos/${REPO}/contents/package.json?ref=${sha}`]);
@@ -39,7 +44,7 @@ if (pkgFile) {
 	pkg = packageFindings(base, head);
 }
 
-const findings = [...fileFindings(files), ...pkg];
+const findings = [...completeness(files.length, Number(pr.trim())), ...fileFindings(files), ...pkg];
 for (const f of findings) console.log(`GUARDED ${f.path} — ${f.reason}`);
 console.log(`gate-guard: ${files.length} file(s); ${findings.length} guarded change(s)`);
 if (findings.length > 0) {

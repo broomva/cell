@@ -4,7 +4,8 @@
 # on a red `bun run check`. Exit 2 sends stderr back to the agent and keeps it
 # working. On the second consecutive stop (stop_hook_active) it warns
 # instead, so a stuck agent cannot loop forever; CI's required checks are the
-# hard stop.
+# hard stop. Without a fetched origin/main (a shallow or stale clone) only
+# uncommitted changes are seen.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 input=$(cat)

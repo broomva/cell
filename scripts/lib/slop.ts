@@ -45,8 +45,8 @@ export const LINE_RULES: LineRule[] = [
 	{
 		id: "conditional-test",
 		applies: (p) => TEST.test(p),
-		// Biome's noSkippedTests covers .skip and x-prefixed tests; these slip past it.
-		bad: /\.(todo|skipIf|if|failing)\(/,
+		// Biome's noSkippedTests covers .skip( and x-prefixed tests; these slip past it.
+		bad: /\.(todo|todoIf|skipIf|if|failing)\b|\.skip\.|\.each\(\s*\[\s*\]/,
 		detail: "a todo, conditional or expected-to-fail test can switch itself off",
 	},
 	{
@@ -164,47 +164,90 @@ export function dependencyRangeFindings(packageJson: string): Finding[] {
 	return out;
 }
 
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Model-path files: changing one needs live evidence (an eval run) or a stated reason it was not run. */
+export const MODEL_PATH = /^(agent\/|evals\/|package\.json$)/;
+
 /**
  * Each changed source file under agent/ or scripts/lib/ needs a changed test
- * or eval that names it (its file stem, as a word). An unrelated test edit
- * does not count.
+ * that imports it and adds an assertion. agent/ files no test imports (tool
+ * slots, agent.ts, channels) need the surface test or an eval to change
+ * instead. A test that merely mentions the module's name does not count.
  */
-export function untestedChangeFindings(changes: FileChange[], readFile: (path: string) => string): Finding[] {
+export function untestedChangeFindings(
+	changes: FileChange[],
+	readFile: (path: string) => string,
+	added: AddedLine[],
+): Finding[] {
 	const live = changes.filter((c) => c.status !== "D");
-	const tests = live.filter((c) => TEST.test(c.path)).map((c) => readFile(c.path));
+	const tests = live.filter((c) => TEST.test(c.path));
+	const asserts = (path: string) =>
+		added.some(
+			(l) => l.path === path && /\bexpect\(|\bt\.(check|require|called|succeeded|usedNoTools|notCalled)/.test(l.text),
+		);
 	const out: Finding[] = [];
 	for (const c of live) {
 		if (!/^(agent\/|scripts\/lib\/)/.test(c.path) || !TS.test(c.path) || TEST.test(c.path)) continue;
-		const stem = c.path.split("/").at(-1)?.replace(TS, "") ?? "";
-		const named = new RegExp(`\\b${stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
-		if (!tests.some((t) => named.test(t))) {
-			out.push({ rule: "source-without-test", where: c.path, detail: `no changed test or eval names "${stem}"` });
+		const modulePath = c.path.replace(TS, "");
+		const imports = new RegExp(`["'](?:\\.{1,2}/)+${escapeRe(modulePath)}(?:\\.ts)?["']`);
+		const covered = tests.some((t) => imports.test(readFile(t.path)) && asserts(t.path));
+		const surface =
+			/^agent\//.test(c.path) &&
+			tests.some((t) => (t.path === "test/surface.test.ts" || /^evals\//.test(t.path)) && asserts(t.path));
+		if (!covered && !surface) {
+			out.push({
+				rule: "source-without-test",
+				where: c.path,
+				detail: `no changed test imports ${modulePath} and adds an assertion`,
+			});
 		}
 	}
 	return out;
 }
 
+export interface EvidenceNeeds {
+	/** The mutant catalogue's size: the verdict must report every one killed. */
+	mutants: number;
+	/** The PR changes a model-path file (MODEL_PATH). */
+	modelPath: boolean;
+}
+
 /**
- * The PR body must carry evidence: a `## Verification` section, visible on the
- * rendered page, quoting `mutate: N/N killed` from `bun run verify`. Text can
- * be forged and CI reruns everything anyway; the section exists for what CI
- * cannot run (live evals) and so a reviewer sees what the author ran.
+ * The PR body must carry evidence, visible on the rendered page, in a
+ * `## Verification` section: `mutate: N/N killed` with N the catalogue size,
+ * and, when the model path changed, eve's `Results: N passed (N total)` line
+ * or `Live eval not run: <reason>`. Text can be forged and CI reruns the
+ * mutation gate anyway; the section exists for what CI cannot run (live
+ * evals) and so a reviewer sees what the author ran.
  */
-export function prBodyFindings(body: string): Finding[] {
+export function prBodyFindings(body: string, needs: EvidenceNeeds): Finding[] {
 	const visible = body.replace(/<!--[\s\S]*?(-->|$)/g, "");
 	const verification = visible.match(/^##\s+Verification\s*\n([\s\S]*?)(?=^##\s|$(?![\s\S]))/m);
 	if (!verification) {
 		return [{ rule: "pr-verification", where: "PR body", detail: "no visible `## Verification` section" }];
 	}
-	const verdict = (verification[1] ?? "").match(/mutate: (\d+)\/(\d+) killed/);
-	if (!verdict || verdict[1] !== verdict[2]) {
-		return [
-			{
-				rule: "pr-verification",
-				where: "PR body",
-				detail: "the Verification section does not quote `mutate: N/N killed` from `bun run verify`",
-			},
-		];
+	const section = verification[1] ?? "";
+	const out: Finding[] = [];
+	const verdict = section.match(/mutate: (\d+)\/(\d+) killed/);
+	if (!verdict || verdict[1] !== verdict[2] || Number(verdict[2]) !== needs.mutants) {
+		out.push({
+			rule: "pr-verification",
+			where: "PR body",
+			detail: `the Verification section does not quote \`mutate: ${needs.mutants}/${needs.mutants} killed\``,
+		});
 	}
-	return [];
+	if (needs.modelPath) {
+		const ran = /Results: (\d+) passed \(\1 total\)/.test(section);
+		const declined = /^Live eval not run: \S+(\s+\S+){4,}/m.test(section);
+		if (!ran && !declined) {
+			out.push({
+				rule: "pr-live-evidence",
+				where: "PR body",
+				detail:
+					"the model path changed: quote `bun run eval`'s `Results: N passed (N total)`, or `Live eval not run: <reason>`",
+			});
+		}
+	}
+	return out;
 }

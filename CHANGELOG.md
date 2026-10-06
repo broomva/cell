@@ -12,4 +12,6 @@ and the project uses [Semantic Versioning](https://semver.org/) once it has a re
 - Verification gates: `bun run verify` (types, Biome, tests with a coverage floor, grep gate, audit, eve build,
   mutation gate, slop gate), repository git hooks, a Claude Code Stop hook, and CI that runs all of it.
 - `gate-guard`: a required check run from `main`'s copy that fails any PR touching the gates, deleting or moving a
-  test, or changing `package.json` scripts or overrides.
+  test out of its suite, changing a non-dependency `package.json` key, or listing fewer files than it changes.
+- Agent PreToolUse hook: refuses the admin bypass, ruleset writes, pushes to `main`, force pushes and hook bypasses.
+- `bun run doctor` checks `main`'s ruleset requires `gate` and `gate-guard`, bound to the GitHub Actions app.

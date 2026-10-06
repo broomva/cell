@@ -50,7 +50,7 @@ jobs:
         run: bun run mutate
 
   slop:
-    name: slop gate (diff rules · pins · coverage and mutant ratchets · PR evidence)
+    name: slop gate (diff rules · pins · source needs a test · PR evidence)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5

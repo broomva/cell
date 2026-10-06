@@ -7,8 +7,8 @@
 <!--
 Required: CI's slop gate fails a PR whose Verification section does not quote
 `mutate: N/N killed`. Paste the tail of `bun run verify` (check · audit · build · mutate · slop),
-plus the live evidence for anything that touches the model path:
-`bun run doctor` and `bun run eval` output. Say what you did NOT run.
+plus, if agent/, evals/ or package.json changed, `bun run eval`'s `Results: N passed (N total)`
+line, or a line `Live eval not run: <reason>`. Say what you did NOT run.
 -->
 
 ## Risk

@@ -14,10 +14,11 @@ These are the boundaries the tests and CI enforce. A change that weakens one is 
 | The OAuth grant never enters the eve process; it lives in `holon` and reaches the app only as a per-run loopback key | `agent/lib/provider.ts`, `test/provider.test.ts`, mutants `provider-*` |
 | The sidecar is loopback-only; api mode sends the real key only to `api.anthropic.com`, whatever the process environment says | same |
 | The root agent has no shell, file, fetch, search or self-copy tool | `agent/tools/*.ts`, `test/surface.test.ts`, mutants `surface-*` |
-| `ANTHROPIC_*` is read in one file of the app | `scripts/grep-gate.sh` (literal names and computed environment reads) |
+| The environment is read in one file of the app | `scripts/grep-gate.sh`: any `process.env`, `globalThis`, `Bun.env`, `import.meta.env` or `process` import in `agent/` outside the provider |
 | No holon work starts that could outlive the grant (Claude Code is the only refresher) | `agent/lib/grant.ts`, mutants `grant-*` |
 | No secret is committed | gitleaks in the pre-commit hook (refuses the commit if gitleaks is missing) and in CI over the full history |
-| A PR cannot weaken the checks that judge it | `gate-guard`, run from `main`'s copy under `pull_request_target`, reading the PR through the API only |
+| A PR cannot weaken the checks that judge it | `gate-guard`, run from `main`'s copy under `pull_request_target`, reading the PR through the API only; `bun run doctor` fails while `main`'s ruleset does not require it |
+| Agents in this repository cannot use the admin bypass, rewrite the ruleset or push to `main` | `scripts/agent-pretool-gate.ts` (Claude Code PreToolUse). Not covered: an agent outside this repository with the same admin token. A non-admin agent identity closes that. |
 
 ## Scope and use
 
