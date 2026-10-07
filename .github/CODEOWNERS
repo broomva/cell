@@ -1,0 +1,8 @@
+# Review routing. With one maintainer, code-owner review cannot be required
+# (an author cannot approve their own PR); gate-guard is what holds the gates.
+*                       @broomva
+/.github/               @broomva
+/scripts/lib/           @broomva
+/agent/lib/provider.ts  @broomva
+/agent/tools/           @broomva
+/bunfig.toml            @broomva

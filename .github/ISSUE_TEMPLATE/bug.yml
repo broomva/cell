@@ -1,0 +1,15 @@
+name: Bug
+description: Something the cell does that it should not, or fails to do.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: Command, output, and what you expected. }
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes: { label: bun run doctor, description: Paste its output., render: text }
+    validations: { required: true }
+  - type: input
+    id: versions
+    attributes: { label: Versions, placeholder: "holon 0.1.0 · eve 0.67.2 · bun 1.3.14 · node 24" }

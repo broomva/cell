@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Installed by `bun run hooks:install` (core.hooksPath=.githooks). A repo
+# hooksPath shadows any global hooks dir, so the secret scan runs here, and a
+# missing scanner refuses the commit rather than skipping the scan.
+set -euo pipefail
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is required (brew install gitleaks)" >&2
+  exit 1
+fi
+gitleaks protect --staged --redact --no-banner
+bun run --silent check

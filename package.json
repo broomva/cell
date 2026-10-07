@@ -1,0 +1,47 @@
+{
+	"name": "cell",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#*": "./agent/*",
+		"#evals/*": "./evals/*"
+	},
+	"scripts": {
+		"dev": "holon sidecar -- eve dev",
+		"eval": "holon sidecar -- eve eval --tag live",
+		"build": "eve build",
+		"doctor": "bun scripts/doctor.ts",
+		"typecheck": "tsc",
+		"lint": "biome ci .",
+		"test": "bun test --coverage",
+		"grep-gate": "scripts/grep-gate.sh",
+		"check": "bun run typecheck && bun run lint && bun run test && scripts/grep-gate.sh",
+		"mutate": "bun scripts/mutate.ts",
+		"slop": "bun scripts/slop-gate.ts",
+		"audit": "bun audit --ignore=GHSA-hp3w-g68c-fv3c",
+		"format": "biome check --write .",
+		"verify": "bun run check && bun run audit && bun run build:fake && bun run mutate && bun run slop",
+		"build:fake": "EVE_TELEMETRY_DISABLED=1 ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_API_KEY=fake-build-key eve build",
+		"hooks:install": "git config core.hooksPath .githooks"
+	},
+	"dependencies": {
+		"@ai-sdk/anthropic": "4.0.72",
+		"ai": "7.0.105",
+		"eve": "0.67.2",
+		"just-bash": "3.1.0",
+		"zod": "4.5.4"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.15",
+		"@types/bun": "1.4.2",
+		"@types/node": "24.19.1",
+		"typescript": "7.0.2"
+	},
+	"engines": {
+		"node": "24.x"
+	},
+	"overrides": {
+		"undici": "8.11.2"
+	}
+}

@@ -1,0 +1,5 @@
+[test]
+# Pure code only; live evals live under evals/ and never run here.
+root = "test"
+# The floor only rises: scripts/slop-gate.ts fails a PR that lowers it.
+coverageThreshold = { lines = 0.95, functions = 0.95 }
