@@ -22,7 +22,7 @@ Never deploy the sidecar path, never put it on a shared host, never make this re
 
 ```bash
 bun install && bun run hooks:install
-bun run doctor [target-repo]   # machine checks: holon, verify-auth, sidecar smoke, PreToolUse gate, git/gh, Node 24, grant
+bun run doctor [target-repo]   # machine checks: holon, verify-auth, sidecar smoke, PreToolUse gate, git/gh, Node 24, git hooks, ruleset, grant
 bun run verify                 # the definition of done: check · audit · build · mutate · slop (CI runs the same)
 bun run eval                   # live: holon sidecar -- eve eval --tag live (Opus, on the subscription; never in CI)
 bun run dev                    # holon sidecar -- eve dev
