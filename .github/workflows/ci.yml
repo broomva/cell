@@ -21,7 +21,7 @@ env:
 jobs:
   verify:
     name: verify (types · lint · tests + coverage floor · grep gate · audit · build · mutation)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -52,7 +52,7 @@ jobs:
   slop:
     name: slop gate (diff rules · pins · source needs a test · PR evidence)
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -73,11 +73,13 @@ jobs:
 
   secrets:
     name: secrets (gitleaks, full history)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 5
     env:
       GITLEAKS_VERSION: "8.30.0"
-      GITLEAKS_SHA256: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
+      # Per platform, from the release's checksums.txt: hosted Ubuntu, or the local macOS pool (BRO-3227).
+      GITLEAKS_SHA256_LINUX_X64: 79a3ab579b53f71efd634f3aaf7e04a0fa0cf206b7ed434638d1547a2470a66e
+      GITLEAKS_SHA256_DARWIN_ARM64: b251ab2bcd4cd8ba9e56ff37698c033ebf38582b477d21ebd86586d927cf87e7
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,16 +88,21 @@ jobs:
       # The binary, checksum-pinned: no API token, no PR-commit listing, every commit scanned.
       - name: install gitleaks
         run: |
-          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)   platform=linux_x64;    sum="${GITLEAKS_SHA256_LINUX_X64}" ;;
+            macOS-ARM64) platform=darwin_arm64; sum="${GITLEAKS_SHA256_DARWIN_ARM64}" ;;
+            *) echo "::error::no pinned gitleaks for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          tarball="gitleaks_${GITLEAKS_VERSION}_${platform}.tar.gz"
           curl -sSfLO "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
-          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          echo "${sum}  ${tarball}" | shasum -a 256 -c -
           tar -xzf "${tarball}" gitleaks
       - name: gitleaks detect (all history)
         run: ./gitleaks detect --redact --no-banner --exit-code 1
 
   actionlint:
     name: actionlint
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,7 +118,7 @@ jobs:
   # edit is guarded, and gate-guard runs main's copy of the same check.
   ruleset:
     name: ruleset (main requires gate and gate-guard, bound to Actions)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,7 +138,7 @@ jobs:
     name: gate
     if: always()
     needs: [verify, slop, secrets, actionlint, ruleset]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: all jobs passed

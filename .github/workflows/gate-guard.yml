@@ -14,7 +14,7 @@ permissions:
 jobs:
   gate-guard:
     name: gate-guard
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER_LABELS && fromJSON(vars.CI_RUNNER_LABELS) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       # The default checkout under pull_request_target is the base branch.
