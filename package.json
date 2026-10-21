@@ -26,9 +26,9 @@
 		"hooks:install": "git config core.hooksPath .githooks"
 	},
 	"dependencies": {
-		"@ai-sdk/anthropic": "4.0.72",
-		"ai": "7.0.105",
-		"eve": "0.67.2",
+		"@ai-sdk/anthropic": "4.0.79",
+		"ai": "7.0.140",
+		"eve": "0.79.0",
 		"just-bash": "3.6.0",
 		"zod": "4.6.7"
 	},
