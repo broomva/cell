@@ -466,11 +466,29 @@ export const MUTANTS: Mutant[] = [
 	{
 		id: "slop-deps-only-scripts",
 		file: "scripts/lib/slop.ts",
-		find: "if (DEPENDENCY_MAPS.has(key)) continue;",
-		replace: "continue;",
+		find: "if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) return false;",
+		replace: "",
 		killedBy: "test/slop.test.ts",
 		killedByTest: "a package.json change outside the dependency maps is not a bump",
 		why: "a script or trustedDependencies edit in package.json would pass as a dependency bump",
+	},
+	{
+		id: "slop-deps-only-new-package",
+		file: "scripts/lib/slop.ts",
+		find: "if (names.length !== Object.keys(b).length || !names.every((n) => Object.hasOwn(b, n))) return false;",
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "adding, removing or renaming a package, or a non-exact spec, is not a bump",
+		why: "a PR adding or swapping in a new package would skip the evidence rule as a 'bump'",
+	},
+	{
+		id: "slop-deps-only-lockfile-alone",
+		file: "scripts/lib/slop.ts",
+		find: 'if (!changes.some((c) => c.path === "package.json")) return false;',
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "another file is not a dependency bump",
+		why: "a lockfile-only change, which can swap resolved code, would skip the evidence rule",
 	},
 ];
 

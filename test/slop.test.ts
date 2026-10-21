@@ -305,26 +305,48 @@ describe("source needs a test that imports it and asserts", () => {
 });
 
 describe("dependency-only change", () => {
-	const base = JSON.stringify({ name: "cell", scripts: { test: "bun test" }, dependencies: { zod: "4.5.4" } });
-	const bumped = JSON.stringify({ name: "cell", scripts: { test: "bun test" }, dependencies: { zod: "4.6.7" } });
+	const pkg = (deps: unknown, extra: Record<string, unknown> = {}) =>
+		JSON.stringify({ name: "cell", scripts: { test: "bun test" }, dependencies: deps, ...extra });
+	const base = pkg({ zod: "4.5.4", ai: "5.0.1" });
+	const bumped = pkg({ zod: "4.6.7", ai: "5.0.1" });
 	const M = (path: string) => ({ status: "M" as const, path });
 	test("a lockfile and dependency-map bump is a dependency bump", () => {
 		expect(isDependencyOnlyChange([M("package.json"), M("bun.lock")], base, bumped)).toBe(true);
-		expect(isDependencyOnlyChange([M("bun.lock")], undefined, base)).toBe(true);
+		expect(isDependencyOnlyChange([M("package.json")], base, bumped)).toBe(true);
 	});
 	test("another file is not a dependency bump", () => {
-		expect(isDependencyOnlyChange([M("bun.lock"), M("agent/lib/grant.ts")], base, bumped)).toBe(false);
-		expect(isDependencyOnlyChange([M(".github/workflows/ci.yml")], base, base)).toBe(false);
-		expect(isDependencyOnlyChange([{ status: "A", path: "bun.lock" }], base, base)).toBe(false);
+		expect(isDependencyOnlyChange([M("package.json"), M("agent/lib/grant.ts")], base, bumped)).toBe(false);
+		expect(isDependencyOnlyChange([M("package.json"), M(".github/workflows/ci.yml")], base, bumped)).toBe(false);
+		expect(isDependencyOnlyChange([M("bun.lock")], base, base)).toBe(false); // lockfile-only
+		expect(isDependencyOnlyChange([{ status: "R", path: "package.json" }], base, bumped)).toBe(false);
 		expect(isDependencyOnlyChange([], base, base)).toBe(false);
 	});
 	test("a package.json change outside the dependency maps is not a bump", () => {
-		const script = JSON.stringify({ name: "cell", scripts: { test: "true" }, dependencies: { zod: "4.6.7" } });
-		const trusted = JSON.stringify({ ...JSON.parse(bumped), trustedDependencies: ["evil"] });
-		expect(isDependencyOnlyChange([M("package.json")], base, script)).toBe(false);
-		expect(isDependencyOnlyChange([M("package.json")], base, trusted)).toBe(false);
+		expect(
+			isDependencyOnlyChange(
+				[M("package.json")],
+				base,
+				pkg({ zod: "4.6.7", ai: "5.0.1" }, { scripts: { test: "true" } }),
+			),
+		).toBe(false);
+		expect(
+			isDependencyOnlyChange(
+				[M("package.json")],
+				base,
+				pkg({ zod: "4.6.7", ai: "5.0.1" }, { trustedDependencies: ["evil"] }),
+			),
+		).toBe(false);
 		expect(isDependencyOnlyChange([M("package.json")], undefined, bumped)).toBe(false);
 		expect(isDependencyOnlyChange([M("package.json")], base, "{not json")).toBe(false);
+	});
+	test("adding, removing or renaming a package, or a non-exact spec, is not a bump", () => {
+		const M1 = [M("package.json")];
+		expect(isDependencyOnlyChange(M1, base, pkg({ zod: "4.5.4", ai: "5.0.1", "new-pkg": "1.0.0" }))).toBe(false);
+		expect(isDependencyOnlyChange(M1, base, pkg({ zod: "4.5.4" }))).toBe(false);
+		expect(isDependencyOnlyChange(M1, base, pkg({ zod2: "4.5.4", ai: "5.0.1" }))).toBe(false);
+		expect(isDependencyOnlyChange(M1, base, pkg({ zod: "file:../zod", ai: "5.0.1" }))).toBe(false);
+		expect(isDependencyOnlyChange(M1, base, pkg({ zod: "github:x/zod", ai: "5.0.1" }))).toBe(false);
+		expect(isDependencyOnlyChange(M1, base, pkg(null))).toBe(false);
 	});
 });
 
