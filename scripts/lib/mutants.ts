@@ -454,6 +454,42 @@ export const MUTANTS: Mutant[] = [
 		killedByTest: "a missing or unbound required check is a gap",
 		why: "a forgeable, unbound required check would pass the doctor",
 	},
+	{
+		id: "slop-deps-only-any-file",
+		file: "scripts/lib/slop.ts",
+		find: 'if (!LOCKFILES.has(c.path) && c.path !== "package.json") return false;',
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "another file is not a dependency bump",
+		why: "a PR touching source, workflows or tests would skip the evidence rule as a 'bump'",
+	},
+	{
+		id: "slop-deps-only-scripts",
+		file: "scripts/lib/slop.ts",
+		find: "if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) return false;",
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "a package.json change outside the dependency maps is not a bump",
+		why: "a script or trustedDependencies edit in package.json would pass as a dependency bump",
+	},
+	{
+		id: "slop-deps-only-new-package",
+		file: "scripts/lib/slop.ts",
+		find: "if (names.length !== Object.keys(b).length || !names.every((n) => Object.hasOwn(b, n))) return false;",
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "adding, removing or renaming a package, or a non-exact spec, is not a bump",
+		why: "a PR adding or swapping in a new package would skip the evidence rule as a 'bump'",
+	},
+	{
+		id: "slop-deps-only-lockfile-alone",
+		file: "scripts/lib/slop.ts",
+		find: 'if (!changes.some((c) => c.path === "package.json")) return false;',
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "another file is not a dependency bump",
+		why: "a lockfile-only change, which can swap resolved code, would skip the evidence rule",
+	},
 ];
 
 /** Apply a mutant to source text; throws unless `find` matches exactly once. */

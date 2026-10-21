@@ -16,6 +16,19 @@ describe("mutant catalogue", () => {
 		}
 	});
 
+	test("the dependency-only exemption is guarded by its four mutants (BRO-2967)", () => {
+		const ids = [
+			"slop-deps-only-any-file",
+			"slop-deps-only-scripts",
+			"slop-deps-only-new-package",
+			"slop-deps-only-lockfile-alone",
+		];
+		for (const id of ids) {
+			expect(MUTANTS.find((x) => x.id === id)?.file).toBe("scripts/lib/slop.ts");
+			expect(MUTANTS.find((x) => x.id === id)?.killedBy).toBe("test/slop.test.ts");
+		}
+	});
+
 	test("every killedBy file exists, names its test, and is not this catalogue test", () => {
 		for (const m of MUTANTS) {
 			expect(existsSync(join(ROOT, m.killedBy))).toBe(true);

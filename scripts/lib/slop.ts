@@ -277,6 +277,64 @@ export function untestedChangeFindings(
 	return out;
 }
 
+const LOCKFILES = new Set(["bun.lock", "bun.lockb"]);
+const DEPENDENCY_MAPS = new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
+
+/**
+ * A dependency bump: package.json is modified, every other change modifies the lockfile, and
+ * package.json differs only in VERSIONS inside its dependency maps. Each map keeps exactly the
+ * same package names, and every changed value is an exact registry version, so adding, removing
+ * or renaming a package, or a file:/git:/alias spec, is not a bump. Any other key changing
+ * (scripts, overrides, trustedDependencies…), a lockfile-only change, or an added or deleted file
+ * is not one either. Such a PR skips the PR-body evidence rule (owner, 2026-10-21, BRO-2967):
+ * a bot cannot write the Verification section, and CI still reruns the tests, the audit, the
+ * pin check and the mutation gate on the PR itself.
+ * Residual: JSON.parse keeps the last of duplicate keys.
+ */
+export function isDependencyOnlyChange(
+	changes: FileChange[],
+	packageJsonBefore: string | undefined,
+	packageJsonAfter: string,
+): boolean {
+	if (!changes.some((c) => c.path === "package.json")) return false;
+	for (const c of changes) {
+		if (c.status !== "M") return false;
+		if (!LOCKFILES.has(c.path) && c.path !== "package.json") return false;
+	}
+	if (packageJsonBefore === undefined) return false;
+	let before: unknown;
+	let after: unknown;
+	try {
+		before = JSON.parse(packageJsonBefore);
+		after = JSON.parse(packageJsonAfter);
+	} catch {
+		return false;
+	}
+	const isObject = (v: unknown): v is Record<string, unknown> =>
+		typeof v === "object" && v !== null && !Array.isArray(v);
+	if (!isObject(before) || !isObject(after)) return false;
+	for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+		if (DEPENDENCY_MAPS.has(key)) {
+			if (!sameNamesExactVersions(before[key], after[key], isObject)) return false;
+			continue;
+		}
+		if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) return false;
+	}
+	return true;
+}
+
+function sameNamesExactVersions(
+	a: unknown,
+	b: unknown,
+	isObject: (v: unknown) => v is Record<string, unknown>,
+): boolean {
+	if (a === undefined && b === undefined) return true;
+	if (!isObject(a) || !isObject(b)) return false;
+	const names = Object.keys(a);
+	if (names.length !== Object.keys(b).length || !names.every((n) => Object.hasOwn(b, n))) return false;
+	return names.every((n) => a[n] === b[n] || (typeof b[n] === "string" && EXACT.test(b[n] as string)));
+}
+
 export interface EvidenceNeeds {
 	/** The mutant catalogue's size: the verdict must report every one killed. */
 	mutants: number;
