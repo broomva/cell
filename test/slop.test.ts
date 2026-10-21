@@ -339,6 +339,16 @@ describe("dependency-only change", () => {
 		expect(isDependencyOnlyChange([M("package.json")], undefined, bumped)).toBe(false);
 		expect(isDependencyOnlyChange([M("package.json")], base, "{not json")).toBe(false);
 	});
+	test.each(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"])(
+		"every dependency map: a version bump passes, a new package does not (%s)",
+		(map) => {
+			const one = (deps: Record<string, string>) => JSON.stringify({ name: "cell", [map]: deps });
+			expect(isDependencyOnlyChange([M("package.json")], one({ zod: "4.5.4" }), one({ zod: "4.6.7" }))).toBe(true);
+			expect(
+				isDependencyOnlyChange([M("package.json")], one({ zod: "4.5.4" }), one({ zod: "4.5.4", x: "1.0.0" })),
+			).toBe(false);
+		},
+	);
 	test("adding, removing or renaming a package, or a non-exact spec, is not a bump", () => {
 		const M1 = [M("package.json")];
 		expect(isDependencyOnlyChange(M1, base, pkg({ zod: "4.5.4", ai: "5.0.1", "new-pkg": "1.0.0" }))).toBe(false);
