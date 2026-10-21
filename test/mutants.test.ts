@@ -24,9 +24,8 @@ describe("mutant catalogue", () => {
 			"slop-deps-only-lockfile-alone",
 		];
 		for (const id of ids) {
-			const m = MUTANTS.find((x) => x.id === id);
-			expect(m?.file).toBe("scripts/lib/slop.ts");
-			expect(m?.killedBy).toBe("test/slop.test.ts");
+			expect(MUTANTS.find((x) => x.id === id)?.file).toBe("scripts/lib/slop.ts");
+			expect(MUTANTS.find((x) => x.id === id)?.killedBy).toBe("test/slop.test.ts");
 		}
 	});
 
