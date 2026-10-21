@@ -277,6 +277,46 @@ export function untestedChangeFindings(
 	return out;
 }
 
+const LOCKFILES = new Set(["bun.lock", "bun.lockb"]);
+const DEPENDENCY_MAPS = new Set(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]);
+
+/**
+ * A dependency bump: every change modifies the lockfile or package.json, and package.json differs
+ * only inside its dependency maps (a script, a key like trustedDependencies or overrides, or an
+ * added or deleted file is not a bump). Such a PR skips the PR-body evidence rule (owner,
+ * 2026-10-21, BRO-2967): a bot cannot write the Verification section, and CI still reruns the
+ * tests and the mutation gate on the PR itself. Pins are still checked by dependencyRangeFindings.
+ */
+export function isDependencyOnlyChange(
+	changes: FileChange[],
+	packageJsonBefore: string | undefined,
+	packageJsonAfter: string,
+): boolean {
+	if (changes.length === 0) return false;
+	for (const c of changes) {
+		if (c.status !== "M") return false;
+		if (!LOCKFILES.has(c.path) && c.path !== "package.json") return false;
+	}
+	if (!changes.some((c) => c.path === "package.json")) return true;
+	if (packageJsonBefore === undefined) return false;
+	let before: unknown;
+	let after: unknown;
+	try {
+		before = JSON.parse(packageJsonBefore);
+		after = JSON.parse(packageJsonAfter);
+	} catch {
+		return false;
+	}
+	const isObject = (v: unknown): v is Record<string, unknown> =>
+		typeof v === "object" && v !== null && !Array.isArray(v);
+	if (!isObject(before) || !isObject(after)) return false;
+	for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+		if (DEPENDENCY_MAPS.has(key)) continue;
+		if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) return false;
+	}
+	return true;
+}
+
 export interface EvidenceNeeds {
 	/** The mutant catalogue's size: the verdict must report every one killed. */
 	mutants: number;

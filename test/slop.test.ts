@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	dependencyRangeFindings,
 	importedNames,
+	isDependencyOnlyChange,
 	lineFindings,
 	MODEL_PATH,
 	parseAddedLines,
@@ -300,6 +301,30 @@ describe("source needs a test that imports it and asserts", () => {
 			{ status: "M" as const, path: "scripts/doctor.ts" },
 		];
 		expect(untestedChangeFindings(changes, read, [])).toEqual([]);
+	});
+});
+
+describe("dependency-only change", () => {
+	const base = JSON.stringify({ name: "cell", scripts: { test: "bun test" }, dependencies: { zod: "4.5.4" } });
+	const bumped = JSON.stringify({ name: "cell", scripts: { test: "bun test" }, dependencies: { zod: "4.6.7" } });
+	const M = (path: string) => ({ status: "M" as const, path });
+	test("a lockfile and dependency-map bump is a dependency bump", () => {
+		expect(isDependencyOnlyChange([M("package.json"), M("bun.lock")], base, bumped)).toBe(true);
+		expect(isDependencyOnlyChange([M("bun.lock")], undefined, base)).toBe(true);
+	});
+	test("another file is not a dependency bump", () => {
+		expect(isDependencyOnlyChange([M("bun.lock"), M("agent/lib/grant.ts")], base, bumped)).toBe(false);
+		expect(isDependencyOnlyChange([M(".github/workflows/ci.yml")], base, base)).toBe(false);
+		expect(isDependencyOnlyChange([{ status: "A", path: "bun.lock" }], base, base)).toBe(false);
+		expect(isDependencyOnlyChange([], base, base)).toBe(false);
+	});
+	test("a package.json change outside the dependency maps is not a bump", () => {
+		const script = JSON.stringify({ name: "cell", scripts: { test: "true" }, dependencies: { zod: "4.6.7" } });
+		const trusted = JSON.stringify({ ...JSON.parse(bumped), trustedDependencies: ["evil"] });
+		expect(isDependencyOnlyChange([M("package.json")], base, script)).toBe(false);
+		expect(isDependencyOnlyChange([M("package.json")], base, trusted)).toBe(false);
+		expect(isDependencyOnlyChange([M("package.json")], undefined, bumped)).toBe(false);
+		expect(isDependencyOnlyChange([M("package.json")], base, "{not json")).toBe(false);
 	});
 });
 

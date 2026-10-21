@@ -10,6 +10,7 @@ import {
 	dependencyRangeFindings,
 	type FileChange,
 	type Finding,
+	isDependencyOnlyChange,
 	lineFindings,
 	MODEL_PATH,
 	parseAddedLines,
@@ -61,10 +62,21 @@ const findings: Finding[] = [
 ];
 
 const body = process.env.PR_BODY;
-if (body !== undefined) {
+// package.json as it was at the base; absent (or unreadable) means "not a plain bump".
+const before = Bun.spawnSync(["git", "show", `${base}:package.json`], { cwd: ROOT, stdout: "pipe", stderr: "pipe" });
+const packageJsonBefore = before.exitCode === 0 ? before.stdout.toString() : undefined;
+const dependencyOnly = isDependencyOnlyChange(
+	changes,
+	packageJsonBefore,
+	readFileSync(join(ROOT, "package.json"), "utf8"),
+);
+if (body === undefined) console.log("slop: PR_BODY unset; skipping the PR body checks (CI sets it)");
+else if (dependencyOnly)
+	console.log("slop: dependency-only change; PR body evidence not required (CI reruns tests and the mutation gate)");
+else {
 	const modelPath = changes.some((c) => MODEL_PATH.test(c.path));
 	findings.push(...prBodyFindings(body, { mutants: MUTANTS.length, modelPath }));
-} else console.log("slop: PR_BODY unset; skipping the PR body checks (CI sets it)");
+}
 
 for (const f of findings) console.log(`SLOP    ${f.rule.padEnd(26)} ${f.where} — ${f.detail}`);
 console.log(`slop: ${changes.length} file(s) vs ${base.slice(0, 9)}; ${findings.length} finding(s)`);

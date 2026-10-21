@@ -454,6 +454,24 @@ export const MUTANTS: Mutant[] = [
 		killedByTest: "a missing or unbound required check is a gap",
 		why: "a forgeable, unbound required check would pass the doctor",
 	},
+	{
+		id: "slop-deps-only-any-file",
+		file: "scripts/lib/slop.ts",
+		find: 'if (!LOCKFILES.has(c.path) && c.path !== "package.json") return false;',
+		replace: "",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "another file is not a dependency bump",
+		why: "a PR touching source, workflows or tests would skip the evidence rule as a 'bump'",
+	},
+	{
+		id: "slop-deps-only-scripts",
+		file: "scripts/lib/slop.ts",
+		find: "if (DEPENDENCY_MAPS.has(key)) continue;",
+		replace: "continue;",
+		killedBy: "test/slop.test.ts",
+		killedByTest: "a package.json change outside the dependency maps is not a bump",
+		why: "a script or trustedDependencies edit in package.json would pass as a dependency bump",
+	},
 ];
 
 /** Apply a mutant to source text; throws unless `find` matches exactly once. */
